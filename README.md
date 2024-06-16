@@ -1,0 +1,1 @@
+A project app that is a clone of Discord, also equipped with the UML diagrams of the app.
