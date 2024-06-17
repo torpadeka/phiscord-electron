@@ -17,9 +17,8 @@ export default withAuth(function HomePage() {
     return (
         <>
             <SideBar onIconClick={setActivePage}></SideBar>
-
-            {/* sign out */}
-            <div className="ml-20 flex flex-col w-full h-screen items-center justify-center">
+            
+            <div className="ml-20 mt-16 flex flex-col w-full h-screen items-center justify-center">
                 {activePage === "welcome" && <Welcome />}
                 <button
                     className="h-10 w-40 flex bg-blue-200 shadow-md items-center justify-center"
