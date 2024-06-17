@@ -1,6 +1,6 @@
-import React from "react";
 import StyledFirebaseAuth from "@/components/firebase/StyledFirebaseAuth";
 import firebase from "../../firebase/clientApp";
+import { withoutAuth } from "@/hoc/withoutAuth";
 
 const uiConfig = {
     // Popup signin flow rather than redirect flow.
@@ -10,7 +10,7 @@ const uiConfig = {
     signInOptions: [firebase.auth.GoogleAuthProvider.PROVIDER_ID],
 };
 
-export default function AuthPage() {
+export default withoutAuth(function AuthPage() {
     return (
         <>
             <div>
@@ -23,5 +23,4 @@ export default function AuthPage() {
             </div>
         </>
     );
-}
-//
+});

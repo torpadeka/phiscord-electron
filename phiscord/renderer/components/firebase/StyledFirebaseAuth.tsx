@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import * as firebaseui from "firebaseui";
 import "firebaseui/dist/firebaseui.css";
 
 interface Props {
@@ -16,43 +15,51 @@ interface Props {
     className?: string;
 }
 
-const StyledFirebaseAuth = ({
+const StyledFirebaseAuth = ({   
     uiConfig,
     firebaseAuth,
     className,
     uiCallback,
 }: Props) => {
     const [userSignedIn, setUserSignedIn] = useState(false);
+    const [firebaseUiWidget, setFirebaseUiWidget] = useState<any>(null);
     const elementRef = useRef(null);
 
     useEffect(() => {
-        // Get or Create a firebaseUI instance.
-        const firebaseUiWidget =
-            firebaseui.auth.AuthUI.getInstance() ||
-            new firebaseui.auth.AuthUI(firebaseAuth);
-        if (uiConfig.signInFlow === "popup") firebaseUiWidget.reset();
+        let firebaseUiInstance: any;
 
-        // We track the auth state to reset firebaseUi if the user signs out.
-        const unregisterAuthObserver = onAuthStateChanged(
-            firebaseAuth,
-            (user) => {
-                if (!user && userSignedIn) firebaseUiWidget.reset();
-                setUserSignedIn(!!user);
-            }
-        );
+        const loadFirebaseUI = async () => {
+            const firebaseui = await import('firebaseui');
+            firebaseUiInstance =
+                firebaseui.auth.AuthUI.getInstance() ||
+                new firebaseui.auth.AuthUI(firebaseAuth);
 
-        // Trigger the callback if any was set.
-        if (uiCallback) uiCallback(firebaseUiWidget);
+            if (uiConfig.signInFlow === "popup") firebaseUiInstance.reset();
 
-        // Render the firebaseUi Widget.
-        // @ts-ignore
-        firebaseUiWidget.start(elementRef.current, uiConfig);
+            const unregisterAuthObserver = onAuthStateChanged(
+                firebaseAuth,
+                (user) => {
+                    if (!user && firebaseUiWidget) firebaseUiWidget.reset();
+                    setUserSignedIn(!!user);
+                }
+            );
 
-        return () => {
-            unregisterAuthObserver();
-            firebaseUiWidget.reset();
+            if (uiCallback) uiCallback(firebaseUiInstance);
+
+            firebaseUiInstance.start(elementRef.current, uiConfig);
+
+            setFirebaseUiWidget(firebaseUiInstance);
+
+            return () => {
+                unregisterAuthObserver();
+                firebaseUiInstance.reset();
+            };
         };
-    }, [firebaseui, uiConfig]);
+
+        if (typeof window !== "undefined") {
+            loadFirebaseUI();
+        }
+    }, [uiConfig]);
 
     return <div className={className} ref={elementRef} />;
 };

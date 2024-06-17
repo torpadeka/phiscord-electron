@@ -20,7 +20,7 @@ export default withAuth(function HomePage() {
 
             {/* sign out */}
             <div className="ml-20 flex flex-col w-full h-screen items-center justify-center">
-                {activePage === "welcome" && (<Welcome/>)}
+                {activePage === "welcome" && <Welcome />}
                 <button
                     className="h-10 w-40 flex bg-blue-200 shadow-md items-center justify-center"
                     onClick={() => {

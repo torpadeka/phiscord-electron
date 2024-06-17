@@ -13,7 +13,7 @@ const fontSans = FontSans({
 });
 
 function MyApp({ Component, pageProps }: AppProps) {
-    // outer div will apply the Inter font to ALL pages
+    // outer div will apply the Inter font to ALL
     return (
         <>
             <div className={cn("font-sans antialiased", fontSans.variable)}>
