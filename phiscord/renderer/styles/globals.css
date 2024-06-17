@@ -2,11 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer components {
+/* Example of Tailwind CSS application using custom class names */
+/* @layer components {
     .sidebar-icon {
         @apply flex items-center justify-center h-14 w-14 my-2 shadow-md bg-blue-500 rounded-xl;
     }
-}
+} */
 
 @layer base {
     :root {

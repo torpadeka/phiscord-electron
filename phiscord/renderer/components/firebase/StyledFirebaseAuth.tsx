@@ -16,7 +16,7 @@ interface Props {
     className?: string;
 }
 
-const StyledFirebaseAuth = ({   
+const StyledFirebaseAuth = ({
     uiConfig,
     firebaseAuth,
     className,
