@@ -5,7 +5,7 @@ const SideBar = ({ onIconClick }) => {
         <>
             <div
                 className="flex flex-col items-center fixed top-0 left-0 w-20 m-0 h-screen
-                        bg-slate-200 text-white shadow-lg"
+                        dark:bg-slate-800 bg-slate-200 dark:text-white"
             >
                 <SideBarIcon
                     icon={<LuBox size="30" />}
@@ -21,7 +21,8 @@ const SideBarIcon = ({ icon, onClick }) => {
         <>
             <div
                 onClick={onClick}
-                className="flex items-center justify-center h-14 w-14 my-2 shadow-lg bg-slate-300 rounded-xl"
+                className="flex items-center justify-center h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
+                dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
             >
                 {icon}
             </div>

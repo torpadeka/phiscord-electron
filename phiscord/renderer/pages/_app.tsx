@@ -1,4 +1,3 @@
-import React from "react";
 import type { AppProps } from "next/app";
 
 import "../styles/globals.css";
@@ -16,7 +15,7 @@ function MyApp({ Component, pageProps }: AppProps) {
     // outer div will apply the Inter font to ALL
     return (
         <>
-            <div className={cn("dark font-sans antialiased", fontSans.variable)}>
+            <div className={cn("font-sans antialiased", fontSans.variable)}>
                 <Component {...pageProps} F />
             </div>
         </>
