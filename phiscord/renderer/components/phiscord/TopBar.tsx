@@ -2,8 +2,8 @@ import { useState } from "react";
 import { MdOutlineDarkMode } from "react-icons/md";
 
 const TopBar = () => {
-    const [darkTheme, setDarkTheme] = useState(false);
-
+    const [darkTheme, setDarkTheme] = useState(true);
+    
     if (darkTheme) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
 

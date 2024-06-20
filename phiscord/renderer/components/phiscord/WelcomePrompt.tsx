@@ -1,5 +1,6 @@
 import { LuBox } from "react-icons/lu";
 import firebase from "../../../firebase/clientApp";
+import { Button } from "../ui/button";
 
 const WelcomePrompt = () => {
     return (
@@ -11,14 +12,13 @@ const WelcomePrompt = () => {
                         Welcome to Phiscord
                     </div>
                 </div>
-                <button
-                    className="h-10 w-40 rounded-3xl flex bg-slate-400 dark:bg-slate-800 shadow-md items-center justify-center hover:brightness-125"
+                <Button
                     onClick={() => {
                         firebase.auth().signOut();
                     }}
                 >
                     Sign Out
-                </button>
+                </Button>
             </div>
         </>
     );
