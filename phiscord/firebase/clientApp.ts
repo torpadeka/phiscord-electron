@@ -16,4 +16,8 @@ if (!firebase.apps.length) {
     firebase.initializeApp(clientCredentials);
 }
 
+const firestore = firebase.firestore();
+
+export { firestore };
+
 export default firebase;

@@ -1,6 +1,7 @@
 import { useRouter } from "next/router";
 
 import firebase from "../../firebase/clientApp";
+import { firestore } from "../../firebase/clientApp";
 import { useAuthState } from "react-firebase-hooks/auth";
 import type { Auth } from "firebase/auth";
 
@@ -19,9 +20,27 @@ export function withAuth(Component) {
             return null;
         }
 
-        if(loading === true){
-            return <><div className="h-screen w-screen flex items-center justify-center shadow-md text-gray-500 text-3xl">Loading . . .</div></>
+        if (loading === true) {
+            return (
+                <>
+                    <div className="h-screen w-screen flex items-center justify-center shadow-md bg-slate-950 text-white text-3xl">
+                        Loading . . .
+                    </div>
+                </>
+            );
         }
+        
+        // Check the 'users' collection if the user already exists or not
+        const userIdQuery = firestore
+            .collection("users")
+            .where("uid", "==", user.uid)
+            .get()
+            .then((querySnapshot) => {
+                if (querySnapshot.empty) {
+                    router.push("/newuser");
+                    return null;
+                }
+            });
 
         return <Component {...props} />;
     };

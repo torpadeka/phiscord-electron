@@ -1,31 +1,40 @@
+import firebase from "../../../firebase/clientApp";
+
 import { useState } from "react";
 import { MdOutlineDarkMode } from "react-icons/md";
+import { FaSignOutAlt } from "react-icons/fa";
 
 const TopBar = () => {
     const [darkTheme, setDarkTheme] = useState(true);
-    
+
     if (darkTheme) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
 
     return (
         <>
-            <div className="fixed top-0 h-14 w-full flex items-center justify-end px-2 bg-slate-300 dark:bg-slate-600">
+            <div className="fixed top-0 h-14 w-full flex items-center justify-end px-2 bg-slate-300 dark:bg-slate-600 gap-2">
                 <TopBarIcon
-                    setTheme={() => {
+                    onClick={() => {
                         setDarkTheme(!darkTheme);
                     }}
                     icon={<MdOutlineDarkMode size={30} />}
+                />
+                <TopBarIcon
+                    onClick={() => {
+                        firebase.auth().signOut();
+                    }}
+                    icon={<FaSignOutAlt size={25} />}
                 />
             </div>
         </>
     );
 };
 
-const TopBarIcon = ({ icon, setTheme }) => {
+const TopBarIcon = ({ icon, onClick }) => {
     return (
         <>
             <div
-                onClick={setTheme}
+                onClick={onClick}
                 className="w-10 h-10 flex items-center justify-center bg-slate-200 dark:bg-slate-700 hover:brightness-150
             rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
             >

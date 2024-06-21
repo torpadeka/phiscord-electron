@@ -1,18 +1,10 @@
 import StyledFirebaseAuth from "@/components/firebase/StyledFirebaseAuth";
 import firebase from "../../firebase/clientApp";
-import { withoutAuth } from "@/hoc/withoutAuth";
+import { withAuth } from "@/hoc/withAuth";
 import { LuBox } from "react-icons/lu";
+import NewUserPrompt from "@/components/phiscord/NewUserPrompt";
 
-const uiConfig = {
-    signInFlow: "popup",
-    signInSuccessUrl: "/home",
-    signInOptions: [
-        firebase.auth.GoogleAuthProvider.PROVIDER_ID,
-        firebase.auth.EmailAuthProvider.PROVIDER_ID,
-    ],
-};
-
-export default withoutAuth(function AuthPage() {
+export default withAuth(function NewUserPage() {
     // Set to dark mode (default theme)
     document.documentElement.classList.add("dark");
 
@@ -24,12 +16,8 @@ export default withoutAuth(function AuthPage() {
                     size={100}
                 ></LuBox>
                 <div className="text-4xl font-bold">Welcome to PHiscord!</div>
-                <div className="text-xl">Sign-in to Continue</div>
-                <StyledFirebaseAuth
-                    className="w-80"
-                    uiConfig={uiConfig}
-                    firebaseAuth={firebase.auth()}
-                />
+                <div className="text-xl">New User, Please Enter Your Username and Tag</div>
+                <NewUserPrompt/>
             </div>
         </>
     );

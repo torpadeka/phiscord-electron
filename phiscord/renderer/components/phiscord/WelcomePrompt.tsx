@@ -1,5 +1,6 @@
-import { LuBox } from "react-icons/lu";
 import firebase from "../../../firebase/clientApp";
+
+import { LuBox } from "react-icons/lu";
 import { Button } from "../ui/button";
 
 const WelcomePrompt = () => {
