@@ -4,6 +4,7 @@ import firebase from "../../firebase/clientApp";
 import { firestore } from "../../firebase/clientApp";
 import { useAuthState } from "react-firebase-hooks/auth";
 import type { Auth } from "firebase/auth";
+import { useEffect } from "react";
 
 export function withAuth(Component) {
     return function WithAuth(props) {
@@ -29,9 +30,10 @@ export function withAuth(Component) {
                 </>
             );
         }
-        
+
         // Check the 'users' collection if the user already exists or not
-        const userIdQuery = firestore
+        useEffect(() => {
+            firestore
             .collection("users")
             .where("uid", "==", user.uid)
             .get()
@@ -41,6 +43,7 @@ export function withAuth(Component) {
                     return null;
                 }
             });
+        }, [user, router]);
 
         return <Component {...props} />;
     };
