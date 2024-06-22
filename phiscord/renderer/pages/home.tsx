@@ -11,10 +11,6 @@ import WelcomePrompt from "@/components/phiscord/WelcomePrompt";
 import TopBar from "@/components/phiscord/TopBar";
 import Dashboard from "@/components/phiscord/Dashboard";
 import UserProfileBox from "@/components/phiscord/UserProfileBox";
-import firebase, { firestore } from "../../firebase/clientApp";
-import { useAuthState } from "react-firebase-hooks/auth";
-import { useCollectionData } from "react-firebase-hooks/firestore"
-import type { Auth } from "firebase/auth";
 
 export default withAuth(function HomePage() {
     const [activePage, setActivePage] = useState("welcome");
@@ -31,8 +27,12 @@ export default withAuth(function HomePage() {
 
             <div className="pl-20 pt-14 h-screen w-screen">
                 {activePage === "welcome" && <WelcomePrompt />}
-                {activePage === "dashboard" && <Dashboard />}
-                {/* <UserProfileBox/> */}
+                {activePage === "dashboard" && (
+                    <>
+                        <Dashboard />
+                        <UserProfileBox />
+                    </>
+                )}
             </div>
         </>
     );

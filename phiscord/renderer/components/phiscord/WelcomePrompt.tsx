@@ -7,9 +7,9 @@ const WelcomePrompt = () => {
     return (
         <>
             <div className="flex flex-col items-center justify-center h-full w-full gap-10 bg-white dark:bg-slate-700">
-                <div className="flex flex-col items-center justify-center">
+                <div className="flex flex-col items-center justify-center gap-4">
                     <LuBox size="100" />
-                    <div className="text-6xl font-bold text-center">
+                    <div className="text-5xl font-bold text-center">
                         Welcome to Phiscord
                     </div>
                 </div>

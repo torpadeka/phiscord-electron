@@ -1,5 +1,8 @@
-import StyledFirebaseAuth from "@/components/firebase/StyledFirebaseAuth";
-import firebase from "../../firebase/clientApp";
+import React from "react";
+import Head from "next/head";
+import Link from "next/link";
+import Image from "next/image";
+
 import { withAuth } from "@/hoc/withAuth";
 import { LuBox } from "react-icons/lu";
 import NewUserPrompt from "@/components/phiscord/NewUserPrompt";

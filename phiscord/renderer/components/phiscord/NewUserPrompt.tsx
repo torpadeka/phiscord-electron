@@ -85,7 +85,7 @@ const NewUserPrompt = () => {
                                     <FormLabel>Username</FormLabel>
                                     <FormControl>
                                         <Input
-                                            placeholder="shadcn"
+                                            placeholder="cord_slayer_90"
                                             {...field}
                                         />
                                     </FormControl>
@@ -104,7 +104,7 @@ const NewUserPrompt = () => {
                                     <FormLabel>Tag</FormLabel>
                                     <FormControl>
                                         <Input
-                                            placeholder="shadcn"
+                                            placeholder="35A4"
                                             {...field}
                                         />
                                     </FormControl>
@@ -115,7 +115,7 @@ const NewUserPrompt = () => {
                                 </FormItem>
                             )}
                         />
-                        <Button type="submit">Submit</Button>
+                        <Button className="w-full" type="submit">Submit</Button>
                     </form>
                 </Form>
             )}
