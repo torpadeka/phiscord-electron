@@ -1,14 +1,22 @@
 import firebase from "../../../firebase/clientApp";
 
 import { useState } from "react";
+
 import { MdOutlineDarkMode } from "react-icons/md";
 import { FaSignOutAlt } from "react-icons/fa";
+import { IoMdSettings } from "react-icons/io";
+
+import { useRouter } from "next/router";
 
 const TopBar = () => {
     const [darkTheme, setDarkTheme] = useState(true);
 
-    if (darkTheme) document.documentElement.classList.add("dark");
-    else document.documentElement.classList.remove("dark");
+    const router = useRouter();
+
+    if (!(typeof document === "undefined")) {
+        if (darkTheme) document.documentElement.classList.add("dark");
+        else document.documentElement.classList.remove("dark");
+    }
 
     return (
         <>
@@ -19,6 +27,12 @@ const TopBar = () => {
                     }}
                     icon={<MdOutlineDarkMode size={30} />}
                 />
+                <TopBarIcon
+                    onClick={() => {
+                        router.push("/settings");
+                    }}
+                    icon={<IoMdSettings size={25} />}
+                ></TopBarIcon>
                 <TopBarIcon
                     onClick={() => {
                         firebase.auth().signOut();

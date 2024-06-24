@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
@@ -19,11 +19,15 @@ const uiConfig = {
 
 export default withoutAuth(function AuthPage() {
     // Set to dark mode (default theme)
-    document.documentElement.classList.add("dark");
+    useEffect(() => {
+        if (typeof document !== "undefined") {
+            document.documentElement.classList.add("dark");
+        }
+    }, []);
 
     return (
-        <>
-            <div className="dark flex flex-col items-center justify-center gap-10 h-screen w-screen">
+        <div className="fade-in">
+            <div className="bg-slate-9500 flex flex-col items-center justify-center gap-10 h-screen w-screen">
                 <LuBox
                     className="hover:scale-105 transition-all duration-150 shadow-lg"
                     size={100}
@@ -36,6 +40,6 @@ export default withoutAuth(function AuthPage() {
                     firebaseAuth={firebase.auth()}
                 />
             </div>
-        </>
+        </div>
     );
 });

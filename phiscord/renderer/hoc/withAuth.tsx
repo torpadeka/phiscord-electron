@@ -1,5 +1,4 @@
 import { useRouter } from "next/router";
-
 import firebase from "../../firebase/clientApp";
 import { firestore } from "../../firebase/clientApp";
 import { useAuthState } from "react-firebase-hooks/auth";
@@ -13,47 +12,55 @@ export function withAuth(Component) {
         const router = useRouter();
 
         // Authentication logic
-        // Destructure user, loading and error out of the useAuthState hook
         const auth = firebase.auth() as unknown as Auth;
         const [user, loading, error] = useAuthState(auth);
 
+        // State to check if we are still verifying the user in Firestore
         const [isCheckingUser, setIsCheckingUser] = useState(true);
 
-        // Redirect to login page if not authenticated
+        // State to track if the user exists in Firestore
+        const [userExists, setUserExists] = useState(false);
+
+        // Effect to handle redirection to login if user is not authenticated
         useEffect(() => {
             if (!loading && !user) {
                 router.push("/auth");
             }
         }, [loading, user, router]);
 
+        // Effect to check if the user exists in Firestore
         useEffect(() => {
-            if (user) {
-                const checkUserExists = async () => {
+            const checkUserExists = async () => {
+                if (user) {
                     try {
-                        const querySnapshot = await firestore
+                        const userDoc = await firestore
                             .collection("users")
-                            .where("uid", "==", user.uid)
+                            .doc(user.uid)
                             .get();
 
-                        if (querySnapshot.empty) {
-                            setIsCheckingUser(false);
-                            router.push("/newuser");
+                        if (userDoc.exists) {
+                            setUserExists(true);
                         } else {
-                            setIsCheckingUser(false);
+                            router.push("/newuser");
                         }
                     } catch (error) {
-                        console.error("Error checking user existence: ", error);
+                        console.error(
+                            "Error checking user data in database!",
+                            error
+                        );
+                    } finally {
                         setIsCheckingUser(false);
                     }
-                };
+                } else {
+                    setIsCheckingUser(false);
+                }
+            };
 
-                checkUserExists();
-            } else {
-                setIsCheckingUser(false);
-            }
+            checkUserExists();
         }, [user, router]);
 
-        if (loading || isCheckingUser) {
+        // If still loading or checking user, show the loading screen
+        if (loading || isCheckingUser || (!user && !loading)) {
             return (
                 <div className="h-screen w-screen flex items-center justify-center shadow-md bg-slate-950 text-white text-3xl gap-4">
                     <AiOutlineLoading className="animate-spin" size="20" />
@@ -62,6 +69,9 @@ export function withAuth(Component) {
             );
         }
 
-        return <Component {...props} />;
+        // If not loading and user is checked, render the original component
+        if(!loading && user){
+            return <Component {...props} />;
+        }
     };
 }

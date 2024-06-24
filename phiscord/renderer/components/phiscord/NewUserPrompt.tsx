@@ -1,6 +1,6 @@
 "use client";
 
-import { firestore } from "../../../firebase/clientApp";
+import { firestore, storage } from "../../../firebase/clientApp";
 import firebase from "../../../firebase/clientApp";
 import type { Auth } from "firebase/auth";
 
@@ -36,15 +36,21 @@ const formSchema = z.object({
 });
 
 const createNewuser = async (username, tag) => {
+    console.log("createNewuser called"); // Logging to verify function call
     const auth = firebase.auth() as unknown as Auth;
     const { uid } = auth.currentUser;
     const usersRef = firestore.collection("users");
+
+    const profilePicture = await storage.ref().child("phiscord_default_pfp.PNG").getDownloadURL();
+
     // Do something with the form values.
     // ✅ This will be type-safe and validated.
-    await usersRef.add({
+    await usersRef.doc(uid).set({
         uid: uid,
         username: username,
         tag: tag,
+        status: null,
+        profilePicture: profilePicture,
     });
 };
 
@@ -60,14 +66,14 @@ const NewUserPrompt = () => {
         },
     });
 
-    function onSubmit(values: z.infer<typeof formSchema>) {
-        createNewuser(values.username, values.tag);
+    async function onSubmit(values: z.infer<typeof formSchema>) {
+        await createNewuser(values.username, values.tag);
         setUserCreated(true);
     }
 
     const redirectHome = () => {
         router.push("/home");
-    };    
+    };
 
     return (
         <>
@@ -75,7 +81,7 @@ const NewUserPrompt = () => {
                 <Form {...usernameForm}>
                     <form
                         onSubmit={usernameForm.handleSubmit(onSubmit)}
-                        className="space-y-8"
+                        className="fade-in space-y-8"
                     >
                         <FormField
                             control={usernameForm.control}
@@ -85,7 +91,7 @@ const NewUserPrompt = () => {
                                     <FormLabel>Username</FormLabel>
                                     <FormControl>
                                         <Input
-                                            placeholder="cord_slayer_90"
+                                            placeholder="AwesomeUser"
                                             {...field}
                                         />
                                     </FormControl>
@@ -103,10 +109,7 @@ const NewUserPrompt = () => {
                                 <FormItem>
                                     <FormLabel>Tag</FormLabel>
                                     <FormControl>
-                                        <Input
-                                            placeholder="35A4"
-                                            {...field}
-                                        />
+                                        <Input placeholder="0000" {...field} />
                                     </FormControl>
                                     <FormDescription>
                                         This is your username's tag.
@@ -115,14 +118,16 @@ const NewUserPrompt = () => {
                                 </FormItem>
                             )}
                         />
-                        <Button className="w-full" type="submit">Submit</Button>
+                        <Button className="w-full" type="submit">
+                            Submit
+                        </Button>
                     </form>
                 </Form>
             )}
             {userCreated && (
-                <div className="flex flex-col items-center justify-center gap-4">
+                <div className="fade-in flex flex-col items-center justify-center gap-4">
                     <div className="text-green-500 font-bold">
-                        Username Saved!
+                        User Information Saved!
                     </div>
                     <Button onClick={redirectHome}>Proceed to PHiscord</Button>
                 </div>
