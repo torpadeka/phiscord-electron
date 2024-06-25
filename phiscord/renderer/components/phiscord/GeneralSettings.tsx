@@ -38,19 +38,20 @@ const GeneralSettings = () => {
                 `profilePictures/${user.uid}/${file.name}`
             );
 
-            try {
-                await fileRef.put(file);
-                const fileUrl = await fileRef.getDownloadURL();
-
-                await firestore.collection("users").doc(user.uid).update({
-                    profilePicture: fileUrl,
-                });
-
-                // Re-fetch the user's profile picture after upload
-                getUserProfilePicture();
-            } catch (error) {
-                console.error("Error uploading file:", error);
+            if (profilePicture != await storage.ref().child("phiscord_default_pfp.PNG").getDownloadURL()) {
+                const prevFileRef = storage.refFromURL(profilePicture);
+                await prevFileRef.delete();
             }
+
+            await fileRef.put(file);
+            const fileUrl = await fileRef.getDownloadURL();
+
+            await firestore.collection("users").doc(user.uid).update({
+                profilePicture: fileUrl,
+            });
+
+            // Re-fetch the user's profile picture after upload
+            getUserProfilePicture();
         }
     };
 
@@ -66,7 +67,7 @@ const GeneralSettings = () => {
                         Set Profile Picture
                     </Label>
                     <Input
-                        className="w-56 bg-slate-200 rounded-3xl cursor-pointer hover:scale-105 transition-all"
+                        className="w-56 bg-slate-200 rounded-3xl cursor-pointer hover:scale-105 transition-all text-black"
                         onChange={handleFileChange}
                         type="file"
                     ></Input>

@@ -49,7 +49,7 @@ const createNewuser = async (username, tag) => {
         uid: uid,
         username: username,
         tag: tag,
-        status: null,
+        customStatus: null,
         profilePicture: profilePicture,
     });
 };

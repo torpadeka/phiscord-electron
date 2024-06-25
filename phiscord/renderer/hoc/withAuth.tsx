@@ -11,15 +11,10 @@ export function withAuth(Component) {
     return function WithAuth(props) {
         const router = useRouter();
 
-        // Authentication logic
         const auth = firebase.auth() as unknown as Auth;
         const [user, loading, error] = useAuthState(auth);
-
-        // State to check if we are still verifying the user in Firestore
         const [isCheckingUser, setIsCheckingUser] = useState(true);
-
-        // State to track if the user exists in Firestore
-        const [userExists, setUserExists] = useState(false);
+        // const [userExists, setUserExists] = useState(false);
 
         // Effect to handle redirection to login if user is not authenticated
         useEffect(() => {
@@ -39,7 +34,7 @@ export function withAuth(Component) {
                             .get();
 
                         if (userDoc.exists) {
-                            setUserExists(true);
+                            // setUserExists(true);
                         } else {
                             router.push("/newuser");
                         }

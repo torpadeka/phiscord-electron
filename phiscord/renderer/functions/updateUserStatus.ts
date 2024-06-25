@@ -2,16 +2,16 @@ import firebase from "../../firebase/clientApp";
 import { firestore, database } from "../../firebase/clientApp";
 
 const monitorUserStatus = (uid: string) => {
-    const userStatusDatabaseRef = database.ref(`/status/${uid}`);
+    const userStatusDatabaseRef = database.ref(`/userState/${uid}`);
 
     const isOfflineForDatabase = {
         status: "offline",
-        last_changed: firebase.database.ServerValue.TIMESTAMP,
+        lastChanged: firebase.database.ServerValue.TIMESTAMP,
     };
 
     const isOnlineForDatabase = {
         status: "online",
-        last_changed: firebase.database.ServerValue.TIMESTAMP,
+        lastChanged: firebase.database.ServerValue.TIMESTAMP,
         isMute: false,
         isDeafen: false,
     };
