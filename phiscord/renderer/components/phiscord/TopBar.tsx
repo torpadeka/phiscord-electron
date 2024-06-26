@@ -1,6 +1,8 @@
-import firebase from "../../../firebase/clientApp";
+import firebase, { firestore } from "../../../firebase/clientApp";
+import { useAuthState } from "react-firebase-hooks/auth";
+import type { Auth } from "firebase/auth";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { MdOutlineDarkMode } from "react-icons/md";
 import { FaSignOutAlt } from "react-icons/fa";
@@ -9,14 +11,51 @@ import { IoMdSettings } from "react-icons/io";
 import { useRouter } from "next/router";
 
 const TopBar = () => {
-    const [darkTheme, setDarkTheme] = useState(true);
+    const auth = firebase.auth() as unknown as Auth;
+    const [user, loading, error] = useAuthState(auth);
+
+    const [darkTheme, setDarkTheme] = useState(null);
 
     const router = useRouter();
 
-    if (!(typeof document === "undefined")) {
-        if (darkTheme) document.documentElement.classList.add("dark");
-        else document.documentElement.classList.remove("dark");
-    }
+    useEffect(() => {
+        if (darkTheme === null) return;
+
+        if (!(typeof document === "undefined")) {
+            if (darkTheme) document.documentElement.classList.add("dark");
+            else document.documentElement.classList.remove("dark");
+        }
+    }, [darkTheme]);
+
+    useEffect(() => {
+        if (user) {
+            const getDarkModeSetting = async () => {
+                const userDoc = await firestore
+                    .collection("users")
+                    .doc(user.uid)
+                    .get();
+                if (userDoc.exists) {
+                    const useDarkMode = userDoc.data()?.useDarkMode;
+                    setDarkTheme(useDarkMode);
+                }
+            };
+            getDarkModeSetting();
+        }
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            const updateDarkModeSetting = async () => {
+                const userRef = await firestore.collection("users").doc(user.uid).get();
+                if(userRef.exists){
+                    await firestore.collection("users").doc(user.uid).update({
+                        useDarkMode: darkTheme,
+                    });
+                }
+            };
+            updateDarkModeSetting();
+        }
+    }, [darkTheme, user]);
 
     return (
         <>

@@ -20,6 +20,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Inter as FontSans } from "next/font/google";
 import { cn } from "@/lib/utils";
+import UserProfilePopup from "./UserProfilePopup";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -43,7 +44,7 @@ const UserProfileBox = () => {
             const unsubscribe = usersRef
                 .doc(user.uid)
                 .onSnapshot((snapshot) => {
-                    if(snapshot.exists){
+                    if (snapshot.exists) {
                         setUserData([
                             snapshot.data().username,
                             snapshot.data().tag,
@@ -85,14 +86,10 @@ const UserProfileBox = () => {
 
     const handleChangeCustomStatus = async () => {
         if (customStatus !== "") {
-            try {
-                // Add the new message to the conversation's "messages" collection
-                await firestore.collection("users").doc(user.uid).update({
-                    customStatus: customStatus,
-                });
-            } catch (error) {
-                console.error("Error updating user custom status: ", error);
-            }
+            // Add the new message to the conversation's "messages" collection
+            await firestore.collection("users").doc(user.uid).update({
+                customStatus: customStatus,
+            });
         } else {
             await firestore.collection("users").doc(user.uid).update({
                 customStatus: null,
@@ -104,6 +101,23 @@ const UserProfileBox = () => {
         <div className="flex justify-between px-4 items-center fixed min-w-72 max-w-72 left-0 bottom-0 h-16 ml-20 bg-slate-300 dark:bg-slate-800 gap-4">
             {userData !== null && (
                 <>
+                    <Popover>
+                        <PopoverTrigger>
+                            <Avatar className="bg-white">
+                                <AvatarImage src={userData[3]} />
+                                <AvatarFallback>{`:(`}</AvatarFallback>
+                            </Avatar>
+                        </PopoverTrigger>
+                        <PopoverContent
+                            sideOffset={10}
+                            className="w-min h-min bg-slate-300 dark:bg-slate-900 border-slate-500"
+                        >
+                            <UserProfilePopup
+                                serverId={null}
+                                userUid={user.uid}
+                            ></UserProfilePopup>
+                        </PopoverContent>
+                    </Popover>
                     <div className="flex items-center justify-center gap-2">
                         <Popover>
                             <PopoverTrigger
@@ -113,10 +127,14 @@ const UserProfileBox = () => {
                                     }
                                 }}
                             >
-                                <Avatar className="bg-white">
-                                    <AvatarImage src={userData[3]} />
-                                    <AvatarFallback>{`:(`}</AvatarFallback>
-                                </Avatar>
+                                <div className="flex flex-col items-start justify-center text-sm w-32">
+                                    <span className="font-semibold max-w-32 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
+                                        {userData[0]}
+                                    </span>
+                                    <span className="text-slate-600 dark:text-slate-400 max-w-32 overflow-x-scroll whitespace-nowrap no-scrollbar no-scrollbar::-webkit-scrollbar">
+                                        {userData[2] || "Online"}
+                                    </span>
+                                </div>
                             </PopoverTrigger>
                             <PopoverContent
                                 sideOffset={10}
@@ -149,15 +167,6 @@ const UserProfileBox = () => {
                                 </div>
                             </PopoverContent>
                         </Popover>
-
-                        <div className="flex flex-col items-start justify-center text-sm">
-                            <span className="font-semibold max-w-32 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
-                                {userData[0]}
-                            </span>
-                            <span className="text-slate-600 dark:text-slate-400 w-32 overflow-x-scroll whitespace-nowrap no-scrollbar no-scrollbar::-webkit-scrollbar">
-                                {userData[2] || "Online"}
-                            </span>
-                        </div>
                     </div>
                     <div className="flex items-center justify-center gap-2">
                         {!isMute && (

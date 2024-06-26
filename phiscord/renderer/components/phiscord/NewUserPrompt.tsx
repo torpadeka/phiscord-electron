@@ -51,6 +51,7 @@ const createNewuser = async (username, tag) => {
         tag: tag,
         customStatus: null,
         profilePicture: profilePicture,
+        useDarkMode: true,
     });
 };
 
@@ -109,7 +110,7 @@ const NewUserPrompt = () => {
                                 <FormItem>
                                     <FormLabel>Tag</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="0000" {...field} />
+                                        <Input placeholder="0001" {...field} />
                                     </FormControl>
                                     <FormDescription>
                                         This is your username's tag.

@@ -3,14 +3,14 @@ import { firestore } from "../../../firebase/clientApp";
 import { useAuthState } from "react-firebase-hooks/auth";
 import type { Auth } from "firebase/auth";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Inter as FontSans } from "next/font/google";
 import { cn } from "@/lib/utils";
 
 import { LuBox } from "react-icons/lu";
 import { FaPlus } from "react-icons/fa6";
 import { IoChatboxEllipsesSharp } from "react-icons/io5";
-import { FaRegFileImage } from "react-icons/fa";
+import { FaRegFileImage, FaUserFriends } from "react-icons/fa";
 import { MdEmojiEmotions } from "react-icons/md";
 
 import EmojiPicker from "emoji-picker-react";
@@ -20,6 +20,20 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@radix-ui/react-label";
 import { Button } from "../ui/button";
@@ -28,6 +42,9 @@ import { Avatar, AvatarImage } from "../ui/avatar";
 import { AvatarFallback } from "@radix-ui/react-avatar";
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "../ui/toaster";
+import UserProfilePopup from "./UserProfilePopup";
+import TextareaAutosize from "react-textarea-autosize";
+import FriendMenu from "./FriendMenu";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -37,7 +54,6 @@ const fontSans = FontSans({
 const Dashboard = () => {
     const [content, setContent] = useState(["welcome", null]);
 
-    console.log("CONTENT: ", content);
     return (
         <>
             <div className="flex w-full h-screen pl-20 pt-14">
@@ -55,6 +71,7 @@ const DashboardNavigation = ({ setContent }) => {
     const [newChatError, setNewChatError] = useState("");
     const [userConversationIds, setUserConversationIds] = useState([]);
     const [selectedConversation, setSelectedConversation] = useState(null);
+    const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
 
     const [toastMessage, setToastMessage] = useState("");
     const { toast } = useToast();
@@ -86,55 +103,50 @@ const DashboardNavigation = ({ setContent }) => {
             setNewChatError("Invalid format!");
             return;
         }
+        const querySnapshot = await firestore
+            .collection("users")
+            .where("username", "==", username)
+            .where("tag", "==", tag)
+            .get();
 
-        try {
-            const querySnapshot = await firestore
-                .collection("users")
-                .where("username", "==", username)
-                .where("tag", "==", tag)
-                .get();
-
-            if (querySnapshot.empty) {
-                setNewChatError("User not found!");
-                return;
-            }
-
-            const doc = querySnapshot.docs[0];
-            const newChatUserId = doc.data().uid;
-
-            if (newChatUserId === user.uid) {
-                setNewChatError("That's you!");
-                return;
-            }
-
-            const checkExistingConversation = await firestore
-                .collection("conversations")
-                .where("userIds", "array-contains", user.uid)
-                .get();
-
-            let conversationExists = false;
-            checkExistingConversation.forEach((conversationDoc) => {
-                if (conversationDoc.data().userIds.includes(newChatUserId)) {
-                    conversationExists = true;
-                }
-            });
-
-            if (conversationExists) {
-                setNewChatError("Conversation already exists!");
-                return;
-            }
-
-            await firestore.collection("conversations").add({
-                userIds: [user.uid, newChatUserId],
-                lastChanged: firebase.firestore.FieldValue.serverTimestamp(),
-            });
-
-            setNewChatError(""); // Clear any previous error
-            setToastMessage("New chat created successfully!");
-        } catch (error) {
-            console.error("Error creating chat:", error);
-            setNewChatError("An Error Occured!");
+        if (querySnapshot.empty) {
+            setNewChatError("User not found!");
+            return;
         }
+
+        const doc = querySnapshot.docs[0];
+        const newChatUserId = doc.data().uid;
+
+        if (newChatUserId === user.uid) {
+            setNewChatError("That's you!");
+            return;
+        }
+
+        const checkExistingConversation = await firestore
+            .collection("conversations")
+            .where("userIds", "array-contains", user.uid)
+            .get();
+
+        let conversationExists = false;
+        checkExistingConversation.forEach((conversationDoc) => {
+            if (conversationDoc.data().userIds.includes(newChatUserId)) {
+                conversationExists = true;
+            }
+        });
+
+        if (conversationExists) {
+            setNewChatError("Conversation already exists!");
+            return;
+        }
+
+        await firestore.collection("conversations").add({
+            userIds: [user.uid, newChatUserId],
+            lastChanged: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        setNewChatError(""); // Clear any previous error
+        setToastMessage("New chat created successfully!");
+        setIsCreatingNewChat(false);
     };
 
     useEffect(() => {
@@ -172,14 +184,19 @@ const DashboardNavigation = ({ setContent }) => {
         <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2">
             <Toaster />
             <div className="flex flex-col w-full h-14 justify-start items-center p-4 gap-4 cursor-pointer">
-                <Popover>
-                    <PopoverTrigger>
+                <Popover
+                    open={isCreatingNewChat}
+                    onOpenChange={setIsCreatingNewChat}
+                >
+                    <PopoverTrigger onClick={() => setIsCreatingNewChat(true)}>
                         <div
                             className="flex w-52 h-10 justify-center items-center gap-2 rounded-3xl bg-slate-300 dark:bg-slate-600
                                         hover:scale-105 hover:brightness-125 transition-all shadow-md"
                         >
-                            <FaPlus size="15" />
-                            <span>New Chat</span>
+                            <div className="flex justify-start items-center gap-2 w-1/2">
+                                <FaPlus size="15" />
+                                <span>New Chat</span>
+                            </div>
                         </div>
                     </PopoverTrigger>
                     <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-60 border-slate-500">
@@ -230,6 +247,34 @@ const DashboardNavigation = ({ setContent }) => {
                         </div>
                     </PopoverContent>
                 </Popover>
+                <Dialog>
+                    <DialogTrigger>
+                        <div
+                            className="flex w-52 h-10 justify-center items-center gap-2 rounded-3xl bg-slate-300 dark:bg-slate-600
+                                        hover:scale-105 hover:brightness-125 transition-all shadow-md"
+                        >
+                            <div className="flex justify-start items-center gap-2 w-1/2">
+                                <FaUserFriends size="15" />
+                                <span>Friends</span>
+                            </div>
+                        </div>
+                    </DialogTrigger>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle
+                                className={cn(
+                                    "dark:text-white text-xl font-sans antialiased",
+                                    fontSans.variable
+                                )}
+                            >
+                                Friends
+                            </DialogTitle>
+                            <DialogDescription>
+                                <FriendMenu></FriendMenu>
+                            </DialogDescription>
+                        </DialogHeader>
+                    </DialogContent>
+                </Dialog>
                 <div className="flex flex-col">
                     {userConversationIds.map((id) => (
                         <ConversationNavigationItem
@@ -351,6 +396,8 @@ const DashboardContent = ({ content }) => {
         text: string | null;
         createdAt: firebase.firestore.Timestamp;
         file: string | null;
+        messageId: string | null;
+        edited: boolean;
     }
 
     const auth = firebase.auth() as unknown as Auth;
@@ -360,6 +407,16 @@ const DashboardContent = ({ content }) => {
     const [userData, setUserData] = useState<Record<string, any>>({});
     const [inputValue, setInputValue] = useState("");
     const [conversationId, setConversationId] = useState("");
+    const [textareaHeight, setTextareaHeight] = useState("2.5rem");
+    const textareaRef = useRef(null);
+    const messagesRef = useRef(null);
+    const [editingMessage, setEditingMessage] = useState<
+        [boolean, string, string]
+    >([false, "", ""]);
+    const [deletingMessage, setDeletingMessage] = useState<[boolean, string]>([
+        false,
+        "",
+    ]);
 
     useEffect(() => {
         if (content[0] !== "conversation") {
@@ -416,6 +473,8 @@ const DashboardContent = ({ content }) => {
                                             text: messageData.text,
                                             createdAt: messageData.createdAt,
                                             file: messageData.file,
+                                            messageId: messageData.messageId,
+                                            edited: messageData.edited,
                                         };
                                     });
                                 setMessages(messagesList);
@@ -444,33 +503,25 @@ const DashboardContent = ({ content }) => {
         return () => unsubscribe();
     }, [content]);
 
-    const onEmojiClick = async (emojiObject, event) => {
-        console.log("Emoji clicked:", emojiObject);
-        if (!emojiObject || !emojiObject.emoji) {
-            console.error("Invalid emoji object");
-            return;
-        }
-
-        // Create a new message object
-        const newMessage = {
-            senderUid: user.uid,
-            isFileType: false,
-            text: emojiObject.emoji || "", // Ensure a default value
-            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-            file: null,
-        };
-
-        try {
-            // Add the new message to the conversation's "messages" collection
-            await firestore
-                .collection("conversations")
-                .doc(conversationId)
-                .collection("messages")
-                .add(newMessage);
-        } catch (error) {
-            console.error("Error sending message: ", error);
-        }
+    const onEmojiClick = (emojiObject, event) => {
+        setInputValue(inputValue + emojiObject.emoji);
     };
+
+    const onEditEmojiClick = (emojiObject, event) => {
+        setEditingMessage([
+            editingMessage[0],
+            editingMessage[1],
+            editingMessage[2] + emojiObject.emoji,
+        ]);
+    };
+
+    const scrollToBottom = () => {
+        messagesRef.current?.scrollIntoView();
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [textareaHeight]);
 
     const handleInputChange = (e) => {
         setInputValue(e.target.value);
@@ -483,26 +534,24 @@ const DashboardContent = ({ content }) => {
             const fileRef = storageRef.child(
                 `messages/${conversationId}/${file.name}`
             );
-            try {
-                await fileRef.put(file);
-                const fileUrl = await fileRef.getDownloadURL();
 
-                const newMessage = {
-                    senderUid: user.uid,
-                    isFileType: true,
-                    text: null,
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    file: fileUrl,
-                };
+            await fileRef.put(file);
+            const fileUrl = await fileRef.getDownloadURL();
 
-                await firestore
-                    .collection("conversations")
-                    .doc(conversationId)
-                    .collection("messages")
-                    .add(newMessage);
-            } catch (error) {
-                console.error("Error uploading file: ", error);
-            }
+            const newMessage = {
+                senderUid: user.uid,
+                isFileType: true,
+                text: null,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                file: fileUrl,
+                edited: false,
+            };
+
+            await firestore
+                .collection("conversations")
+                .doc(conversationId)
+                .collection("messages")
+                .add(newMessage);
         }
     };
 
@@ -514,21 +563,83 @@ const DashboardContent = ({ content }) => {
                 text: inputValue,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 file: null,
+                edited: false,
             };
 
-            try {
-                // Add the new message to the conversation's "messages" collection
-                await firestore
-                    .collection("conversations")
-                    .doc(conversationId)
-                    .collection("messages")
-                    .add(newMessage);
+            await firestore
+                .collection("conversations")
+                .doc(conversationId)
+                .update({
+                    lastChanged:
+                        firebase.firestore.FieldValue.serverTimestamp(),
+                });
 
-                setInputValue("");
-            } catch (error) {
-                console.error("Error sending message: ", error);
-            }
+            // Add the new message to the conversation's "messages" collection
+            const newMessageDocRef = await firestore
+                .collection("conversations")
+                .doc(conversationId)
+                .collection("messages")
+                .add(newMessage);
+
+            newMessageDocRef.update({
+                messageId: newMessageDocRef.id,
+            });
+
+            setInputValue("");
+
+            scrollToBottom();
         }
+    };
+
+    const handleEditMessageClick = (messageId, messageText) => {
+        setEditingMessage([true, messageId, messageText]);
+        console.log("Editing Message:", editingMessage); // Debugging to check values
+    };
+
+    const handleTextareaChange = (e) => {
+        setEditingMessage([
+            editingMessage[0],
+            editingMessage[1],
+            e.target.value,
+        ]);
+    };
+
+    const handleConfirmEditMessage = async () => {
+        if (editingMessage[2] === "") {
+            handleDeleteMessageClick(editingMessage[1]);
+        } else {
+            await firestore
+                .collection("conversations")
+                .doc(conversationId)
+                .collection("messages")
+                .doc(editingMessage[1])
+                .update({
+                    text: editingMessage[2],
+                    edited: true,
+                });
+        }
+
+        setEditingMessage([false, "", ""]);
+    };
+
+    const handleDeleteMessageClick = (messageId) => {
+        setDeletingMessage([true, messageId]);
+    };
+
+    const handleConfirmDeleteMessage = async () => {
+        await firestore
+            .collection("conversations")
+            .doc(conversationId)
+            .collection("messages")
+            .doc(deletingMessage[1])
+            .delete();
+
+        setDeletingMessage([false, ""]);
+    };
+
+    const canModifyMessage = (messageSenderUid) => {
+        if (messageSenderUid === user.uid) return true;
+        return false;
     };
 
     return (
@@ -546,7 +657,12 @@ const DashboardContent = ({ content }) => {
             )}
             {messages && content[0] === "conversation" && (
                 <>
-                    <div className="min-h-full w-full flex flex-col items-start justify-end p-4 pb-24 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
+                    <div
+                        className="min-h-full w-full flex flex-col items-start justify-end p-4 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar"
+                        style={{
+                            paddingBottom: `calc(${textareaHeight} + 2rem)`,
+                        }}
+                    >
                         <span className="flex w-full text-sm items-center justify-center py-10 dark:text-slate-300 text-slate-700">
                             Thus marks the beginning of your legendary chat
                         </span>
@@ -557,38 +673,221 @@ const DashboardContent = ({ content }) => {
                                     key={index}
                                     className="flex items-start justify-start gap-4 w-full min-h-16 p-1"
                                 >
-                                    <Avatar className="bg-white">
-                                        <AvatarImage
-                                            src={
-                                                senderData
-                                                    ? senderData.profilePicture
-                                                    : null
-                                            }
-                                        />
-                                        <AvatarFallback>{}</AvatarFallback>
-                                    </Avatar>
+                                    <Popover>
+                                        <PopoverTrigger>
+                                            <Avatar className="bg-white">
+                                                <AvatarImage
+                                                    src={
+                                                        senderData
+                                                            ? senderData.profilePicture
+                                                            : null
+                                                    }
+                                                />
+                                                <AvatarFallback>{`:(`}</AvatarFallback>
+                                            </Avatar>
+                                        </PopoverTrigger>
+                                        <PopoverContent
+                                            sideOffset={10}
+                                            className="w-min h-min bg-slate-300 dark:bg-slate-900 border-slate-500"
+                                        >
+                                            <UserProfilePopup
+                                                serverId={null}
+                                                userUid={message.senderUid}
+                                            ></UserProfilePopup>
+                                        </PopoverContent>
+                                    </Popover>
                                     <div className="flex flex-col items-start justify-center">
                                         <span>
                                             {senderData
                                                 ? senderData.username
                                                 : "Loading..."}
                                         </span>
-                                        <img
-                                            className="max-h-60"
-                                            src={message.file}
-                                        ></img>
-                                        <span>{message.text}</span>
+                                        <ContextMenu>
+                                            <ContextMenuTrigger>
+                                                <img
+                                                    className="max-h-60"
+                                                    src={message.file}
+                                                ></img>
+                                                <span>{message.text}</span>
+                                                {message.edited && (
+                                                    <div className="text-[10px]">
+                                                        (edited)
+                                                    </div>
+                                                )}
+                                            </ContextMenuTrigger>
+                                            <ContextMenuContent
+                                                className={cn(
+                                                    "dark:text-white text-sm font-sans antialiased",
+                                                    fontSans.variable
+                                                )}
+                                            >
+                                                {(canModifyMessage(
+                                                    message.senderUid
+                                                ) && (
+                                                    <>
+                                                        {!message.file && (
+                                                            <ContextMenuItem
+                                                                onClick={() => {
+                                                                    handleEditMessageClick(
+                                                                        message.messageId,
+                                                                        message.text
+                                                                    );
+                                                                }}
+                                                            >
+                                                                Edit Message
+                                                            </ContextMenuItem>
+                                                        )}
+                                                        <ContextMenuItem
+                                                            onClick={() => {
+                                                                handleDeleteMessageClick(
+                                                                    message.messageId
+                                                                );
+                                                            }}
+                                                        >
+                                                            Delete Message
+                                                        </ContextMenuItem>
+                                                    </>
+                                                )) || (
+                                                    <span className="text-red-600">
+                                                        You can't modify this
+                                                        message!
+                                                    </span>
+                                                )}
+                                            </ContextMenuContent>
+                                        </ContextMenu>
                                     </div>
+                                    <Dialog
+                                        open={editingMessage[0]}
+                                        onOpenChange={(isOpen) =>
+                                            setEditingMessage([
+                                                isOpen,
+                                                editingMessage[1],
+                                                editingMessage[2],
+                                            ])
+                                        }
+                                    >
+                                        <DialogContent>
+                                            <DialogHeader className="flex flex-col gap-4">
+                                                <DialogTitle
+                                                    className={cn(
+                                                        "dark:text-white text-xl font-sans antialiased",
+                                                        fontSans.variable
+                                                    )}
+                                                >
+                                                    Edit Message
+                                                </DialogTitle>
+                                                <DialogDescription
+                                                    className={cn(
+                                                        "dark:text-white text-xl font-sans antialiased",
+                                                        fontSans.variable
+                                                    )}
+                                                >
+                                                    <TextareaAutosize
+                                                        value={
+                                                            editingMessage[2]
+                                                        }
+                                                        onChange={
+                                                            handleTextareaChange
+                                                        }
+                                                        className={cn(
+                                                            "flex w-full min-h-10 rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-slate-300 dark:bg-slate-700 resize-none no-scrollbar no-scrollbar::-webkit-scrollbar"
+                                                        )}
+                                                    ></TextareaAutosize>
+                                                    <div className="w-full flex justify-end pt-4 gap-4">
+                                                        <Popover>
+                                                            <PopoverTrigger>
+                                                                <MdEmojiEmotions className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white cursor-pointer" />
+                                                            </PopoverTrigger>
+                                                            <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-60">
+                                                                <EmojiPicker
+                                                                    onEmojiClick={
+                                                                        onEditEmojiClick
+                                                                    }
+                                                                />
+                                                            </PopoverContent>
+                                                        </Popover>
+                                                        <Button
+                                                            onClick={
+                                                                handleConfirmEditMessage
+                                                            }
+                                                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                        >
+                                                            Confirm Edit
+                                                        </Button>
+                                                    </div>
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                        </DialogContent>
+                                    </Dialog>
+                                    <Dialog
+                                        open={deletingMessage[0]}
+                                        onOpenChange={(isOpen) =>
+                                            setDeletingMessage([
+                                                isOpen,
+                                                deletingMessage[1],
+                                            ])
+                                        }
+                                    >
+                                        <DialogContent>
+                                            <DialogHeader className="flex flex-col gap-4">
+                                                <DialogTitle
+                                                    className={cn(
+                                                        "dark:text-white text-xl font-sans antialiased",
+                                                        fontSans.variable
+                                                    )}
+                                                >
+                                                    Confirm Message Deletion?
+                                                </DialogTitle>
+                                                <DialogDescription
+                                                    className={cn(
+                                                        "dark:text-white text-xl font-sans antialiased",
+                                                        fontSans.variable
+                                                    )}
+                                                >
+                                                    <span className="text-red">
+                                                        The message will be
+                                                        permanently deleted from
+                                                        our database! This
+                                                        cannot be undone!
+                                                    </span>
+                                                    <div className="w-full flex justify-end pt-4 gap-4">
+                                                        <Button
+                                                            onClick={
+                                                                handleConfirmDeleteMessage
+                                                            }
+                                                            className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                        >
+                                                            Confirm
+                                                        </Button>
+                                                        <Button
+                                                            onClick={() => {
+                                                                setDeletingMessage(
+                                                                    [false, ""]
+                                                                );
+                                                            }}
+                                                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                    </div>
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                        </DialogContent>
+                                    </Dialog>
                                 </div>
                             );
                         })}
                     </div>
-                    <div className="fixed flex items-center justify-start px-6 bottom-0 w-full h-20 dark:bg-slate-900 bg-slate-200 gap-4">
+                    <div ref={messagesRef}></div>
+                    <div
+                        className="fixed flex items-start justify-start px-6 bottom-0 h-16 w-full dark:bg-slate-900 bg-slate-200 gap-4 pt-2"
+                        style={{ height: `calc(${textareaHeight} + 1.5rem)` }}
+                    >
                         <Input
                             className="w-9 h-9 opacity-0 absolute bg-slate-100 cursor-pointer"
                             type="file"
                             onChange={handleFileChange}
-                            placeholder="Type a message..."
+                            // accept=".png, .jpg, .jpeg .gif"
                         ></Input>
                         <FaRegFileImage className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white cursor-pointer" />
                         <Popover>
@@ -599,13 +898,26 @@ const DashboardContent = ({ content }) => {
                                 <EmojiPicker onEmojiClick={onEmojiClick} />
                             </PopoverContent>
                         </Popover>
-                        <Input
+                        <TextareaAutosize
+                            ref={textareaRef}
+                            value={inputValue}
+                            onHeightChange={() => {
+                                if (textareaRef.current) {
+                                    setTextareaHeight(
+                                        textareaRef.current.scrollHeight + "px"
+                                    );
+                                }
+                            }}
                             onChange={handleInputChange}
-                            className="min-w-44 max-w-[500px] h-1/2 bg-slate-300 dark:bg-slate-700 rounded-2xl"
-                        ></Input>
+                            placeholder="Type your message here."
+                            rows={1}
+                            className={cn(
+                                "flex min-w-[500px] min-h-10 rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-slate-300 dark:bg-slate-700 resize-none no-scrollbar no-scrollbar::-webkit-scrollbar"
+                            )}
+                        ></TextareaAutosize>
                         <Button
                             onClick={handleSendMessage}
-                            className="bg-slate-900 text-white hover:text-black rounded-xl"
+                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
                         >
                             Send
                         </Button>

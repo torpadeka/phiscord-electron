@@ -18,6 +18,8 @@ const uiConfig = {
 };
 
 export default withoutAuth(function AuthPage() {
+    
+
     // Set to dark mode (default theme)
     useEffect(() => {
         if (typeof document !== "undefined") {
