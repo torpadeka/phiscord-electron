@@ -8,24 +8,57 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Inter as FontSans } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
+import { AiOutlineLoading } from "react-icons/ai";
+import { BiDotsVerticalRounded } from "react-icons/bi";
+import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
+import { Input } from "../ui/input";
+import { Label } from "@radix-ui/react-context-menu";
+import { useToast } from "../ui/use-toast";
+import { Button } from "../ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "../ui/dialog";
 
 const fontSans = FontSans({
     subsets: ["latin"],
     variable: "--font-sans",
 });
 
-const FriendMenu = () => {
-    interface Friend {
-        userUid: string;
-        isOnline: boolean;
-    }
-
+const FriendMenu = ({
+    setContent,
+    closeFriendMenu,
+    setSelectedConversation,
+}) => {
     const auth = firebase.auth() as unknown as Auth;
     const [user, loading, error] = useAuthState(auth);
     const [friendList, setFriendList] = useState([]);
-    const [onlineFriendList, setOnlineFriendList] = useState([]);
-    const [pendingList, setPendingList] = useState([]);
+    const [ingoingPendingList, setIngoingPendingList] = useState([]);
+    const [outgoingPendingList, setOutgoingPendingList] = useState([]);
     const [blockedList, setBlockedList] = useState([]);
+    const [newFriendInput, setNewFriendInput] = useState("");
+    const [addFriendError, setAddFriendError] = useState("");
+
+    const [tabValue, setTabValue] = useState("online");
+    const [toastMessage, setToastMessage] = useState("");
+    const { toast } = useToast();
+
+    console.log(outgoingPendingList);
 
     useEffect(() => {
         const userFriendsRef = firestore
@@ -35,11 +68,7 @@ const FriendMenu = () => {
             .onSnapshot((snapshot) => {
                 let friends = [];
                 snapshot.forEach((doc) => {
-                    const newFriend: Friend = {
-                        userUid: doc.data().userUid,
-                        isOnline: null,
-                    };
-                    friends.push(newFriend);
+                    friends.push(doc.data().userUid);
                 });
                 setFriendList(friends);
             });
@@ -52,12 +81,31 @@ const FriendMenu = () => {
             .collection("users")
             .doc(user.uid)
             .collection("pendingList")
+            .where("receiverUid", "==", user.uid)
             .onSnapshot((snapshot) => {
                 let pendings = [];
                 snapshot.forEach((doc) => {
-                    pendings.push(doc.data().userUid);
+                    pendings.push(doc.data().senderUid);
                 });
-                setPendingList(pendings);
+                setIngoingPendingList(pendings);
+            });
+
+        return () => userPendingsRef();
+    }, []);
+
+    useEffect(() => {
+        const userPendingsRef = firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .where("senderUid", "==", user.uid)
+            .onSnapshot((snapshot) => {
+                console.log("SNAPSHOT EMPTY: ", snapshot.empty);
+                let pendings = [];
+                snapshot.forEach((doc) => {
+                    pendings.push(doc.data().receiverUid);
+                });
+                setOutgoingPendingList(pendings);
             });
 
         return () => userPendingsRef();
@@ -73,99 +121,1106 @@ const FriendMenu = () => {
                 snapshot.forEach((doc) => {
                     blocks.push(doc.data().userUid);
                 });
-                setPendingList(blocks);
+                setBlockedList(blocks);
             });
 
         return () => userBlocksRef();
     }, []);
 
-    // The checking of current friends' realtime statuses work
-    // but it doesn't LIVE when the friend menu is open
-    // TODO: Somehow make this update live without triggering infinite loops :'D
+    // Show toast message
     useEffect(() => {
-        console.log("REALTIME CHECKING RUN");
-        const getUserRealTimeStatus = async () => {
-            const onlineFriends = [];
-
-            friendList.map((friend: Friend) => {
-                const userStatusDatabaseRef = database.ref(
-                    `userState/${friend.userUid}/status`
-                );
-
-                const handleStatusUpdate = (snapshot) => {
-                    if (snapshot.exists()) {
-                        if (snapshot.val() === "online") {
-                            friend.isOnline = true;
-                        } else {
-                            friend.isOnline = false;
-                        }
-                    } else {
-                        friend.isOnline = false;
-                    }
-                };
-
-                userStatusDatabaseRef.on("value", handleStatusUpdate);
-
-                // Clean up the listener when the component unmounts
-                return () => {
-                    userStatusDatabaseRef.off("value", handleStatusUpdate);
-                };
+        if (toastMessage) {
+            toast({
+                title: toastMessage,
             });
-        };
+            setToastMessage(""); // Clear the message after showing the toast
+        }
+    }, [toastMessage, toast]);
 
-        getUserRealTimeStatus();
-    }, [friendList]);
+    const handleNewFriendInputChange = (e) => {
+        setNewFriendInput(e.target.value);
+    };
+
+    const handleAddNewFriend = async () => {
+        if (!newFriendInput) {
+            setAddFriendError("It's empty :(");
+            return;
+        }
+
+        const input = newFriendInput.split("#");
+        if (input.length !== 2) {
+            setAddFriendError("Invalid format!");
+            return;
+        }
+
+        const [username, tag] = input;
+
+        if (
+            username.length < 2 ||
+            username.length > 20 ||
+            tag.length < 4 ||
+            tag.length > 5
+        ) {
+            setAddFriendError("Invalid format!");
+            return;
+        }
+
+        const querySnapshot = await firestore
+            .collection("users")
+            .where("username", "==", username)
+            .where("tag", "==", tag)
+            .get();
+
+        if (querySnapshot.empty) {
+            setAddFriendError("User not found!");
+            return;
+        }
+
+        const doc = querySnapshot.docs[0];
+        const newFriendUserId = doc.data().uid;
+
+        if (newFriendUserId === user.uid) {
+            setAddFriendError("That's you!");
+            return;
+        }
+
+        // check if the users are already friends
+        const userFriendListRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("friendList")
+            .where("userUid", "==", newFriendUserId)
+            .get();
+
+        if (!userFriendListRef.empty) {
+            setAddFriendError("You are already friends with this user!");
+            return;
+        }
+
+        const userPendingListRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList");
+
+        // Check if this user have already sent the request before
+        const checkOutgoingRequest = await userPendingListRef
+            .where("senderUid", "==", user.uid)
+            .where("receiverUid", "==", newFriendUserId)
+            .get();
+        if (!checkOutgoingRequest.empty) {
+            setAddFriendError(
+                "You have already sent a pending friend request to this user!"
+            );
+            return;
+        }
+
+        // Check if this user blocked the user they're trying to add
+        const checkSenderBlockedList = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .where("userUid", "==", newFriendUserId)
+            .get();
+
+        if (!checkSenderBlockedList.empty) {
+            setAddFriendError("You blocked this user!");
+            return;
+        }
+
+        // Check the receiver of the request already blocked this user
+        const checkReceiverBlockedList = await firestore
+            .collection("users")
+            .doc(newFriendUserId)
+            .collection("blockedList")
+            .where("userUid", "==", newFriendUserId)
+            .get();
+
+        if (!checkReceiverBlockedList.empty) {
+            setAddFriendError("This user has blocked you!");
+            return;
+        }
+
+        // Check if the user that this user is adding have already sent a request to this user first,
+        // in which case the other user will automatically become a friend.
+        const checkIngoingRequest = await userPendingListRef
+            .where("senderUid", "==", newFriendUserId)
+            .where("receiverUid", "==", user.uid)
+            .get();
+
+        if (!checkIngoingRequest.empty) {
+            // Remove the other user's outgoing pending request first
+            const friendPendingRef = await firestore
+                .collection("users")
+                .doc(newFriendUserId)
+                .collection("pendingList")
+                .where("senderUid", "==", newFriendUserId)
+                .where("receiverUid", "==", user.uid)
+                .get();
+
+            const friendPendingDocRef = await firestore
+                .collection("users")
+                .doc(newFriendUserId)
+                .collection("pendingList")
+                .doc(friendPendingRef.docs[0].id);
+
+            await friendPendingDocRef.delete();
+
+            // Then remove this user's ingoing pending request
+            const userPendingRef = await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("pendingList")
+                .where("senderUid", "==", newFriendUserId)
+                .where("receiverUid", "==", user.uid)
+                .get();
+
+            const userPendingDocRef = await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("pendingList")
+                .doc(userPendingRef.docs[0].id);
+
+            await userPendingDocRef.delete();
+
+            // Finally, add each other as friends
+            await firestore
+                .collection("users")
+                .doc(newFriendUserId)
+                .collection("friendList")
+                .add({
+                    userUid: user.uid,
+                });
+
+            await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("friendList")
+                .add({
+                    userUid: newFriendUserId,
+                });
+
+            setToastMessage(
+                "This user has already sent you a friend request! You are now friends!"
+            );
+            setTabValue("all");
+            setNewFriendInput("");
+            return;
+        }
+
+        // Add the pending request
+        await firestore
+            .collection("users")
+            .doc(newFriendUserId)
+            .collection("pendingList")
+            .add({
+                senderUid: user.uid,
+                receiverUid: newFriendUserId,
+                sentAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+
+        await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .add({
+                senderUid: user.uid,
+                receiverUid: newFriendUserId,
+                sentAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+
+        setAddFriendError(""); // Clear any previous error
+
+        setToastMessage("Sent the friend request! Pray they heed your call!");
+        setNewFriendInput("");
+        setTabValue("pending");
+    };
 
     return (
         <Tabs
-            defaultValue="online"
             className={cn(
                 "dark:text-white text-xl font-sans antialiased w-[400px]",
                 fontSans.variable
             )}
+            value={tabValue}
         >
-            <TabsList className="gap-4 dark:text-slate-500 text-black">
-                <TabsTrigger value="online">Online</TabsTrigger>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="pending">Pending</TabsTrigger>
-                <TabsTrigger value="blocked">Blocked</TabsTrigger>
+            <TabsList className="gap-4 dark:text-slate-500 text-black flex items-center justify-center w-[460px]">
+                <TabsTrigger
+                    onClick={() => setTabValue("online")}
+                    value="online"
+                >
+                    Online
+                </TabsTrigger>
+                <TabsTrigger onClick={() => setTabValue("all")} value="all">
+                    All
+                </TabsTrigger>
+                <TabsTrigger
+                    onClick={() => setTabValue("pending")}
+                    value="pending"
+                >
+                    Pending
+                </TabsTrigger>
+                <TabsTrigger
+                    onClick={() => setTabValue("blocked")}
+                    value="blocked"
+                >
+                    Blocked
+                </TabsTrigger>
                 <TabsTrigger
                     className="bg-green-700 text-white"
+                    onClick={() => setTabValue("addfriend")}
                     value="addfriend"
                 >
                     Add Friend
                 </TabsTrigger>
             </TabsList>
-            <TabsContent value="online">
-                {friendList.map((friend: Friend, index) => {
+            <TabsContent
+                className="fade-in-faster h-96 w-[460px] overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar"
+                value="online"
+            >
+                {friendList.map((friend, index) => {
                     return (
-                        <div
+                        <UserItem
                             key={index}
-                            className="flex flex-col items-center justify-center text-slate-500"
-                        >
-                            <span>ID: {friend.userUid}</span>
-                            <span>
-                                Online:{" "}
-                                {friend.isOnline !== null &&
-                                    (friend.isOnline ? "True" : "False")}
-                                {friend.isOnline === null && "LOADING"}
-                            </span>
-                        </div>
+                            userUid={friend}
+                            onlyOnline={true}
+                            actionType={"friend"}
+                            setContent={setContent}
+                            closeFriendMenu={closeFriendMenu}
+                            setSelectedConversation={setSelectedConversation}
+                            setToastMessage={setToastMessage}
+                        ></UserItem>
                     );
                 })}
             </TabsContent>
-            <TabsContent value="all">All Friends</TabsContent>
-            <TabsContent value="pending">Pending Friend Requests</TabsContent>
-            <TabsContent value="blocked">Blocked Users</TabsContent>
-            <TabsContent value="addfriend">Add New Friend</TabsContent>
+            <TabsContent
+                className="fade-in-faster flex-1 h-96 w-[460px] overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar"
+                value="all"
+            >
+                {friendList.map((friend, index) => {
+                    return (
+                        <UserItem
+                            key={index}
+                            userUid={friend}
+                            onlyOnline={false}
+                            actionType={"friend"}
+                            setContent={setContent}
+                            closeFriendMenu={closeFriendMenu}
+                            setSelectedConversation={setSelectedConversation}
+                            setToastMessage={setToastMessage}
+                        ></UserItem>
+                    );
+                })}
+            </TabsContent>
+            <TabsContent
+                className="fade-in-faster flex-1 h-96 w-[460px] overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar"
+                value="pending"
+            >
+                <div className="w-full flex items-center justify-center text-[16px] py-2">
+                    Ingoing Friend Requests
+                </div>
+                <div className="h-36">
+                    {!ingoingPendingList[0] && (
+                        <span className="text-sm text-black dark:text-white font-bold w-full h-full flex items-center justify-center">
+                            No one has requested you to be friends
+                        </span>
+                    )}
+                    {ingoingPendingList.map((pending, index) => {
+                        return (
+                            <UserItem
+                                key={index}
+                                userUid={pending}
+                                onlyOnline={false}
+                                actionType={"pendingIngoing"}
+                                setContent={setContent}
+                                closeFriendMenu={closeFriendMenu}
+                                setSelectedConversation={
+                                    setSelectedConversation
+                                }
+                                setToastMessage={setToastMessage}
+                            ></UserItem>
+                        );
+                    })}
+                </div>
+                <div className="fade-in-faster w-full flex items-center justify-center text-[16px] py-2">
+                    Outgoing Friend Requests
+                </div>
+                <div className="h-24">
+                    {!outgoingPendingList[0] && (
+                        <span className="text-sm text-black dark:text-white font-bold w-full h-full flex items-center justify-center">
+                            You haven't requested anyone to be friends
+                        </span>
+                    )}
+                    {outgoingPendingList.map((pending, index) => {
+                        return (
+                            <UserItem
+                                key={index}
+                                userUid={pending}
+                                onlyOnline={false}
+                                actionType={"pendingOutgoing"}
+                                setContent={setContent}
+                                closeFriendMenu={closeFriendMenu}
+                                setSelectedConversation={
+                                    setSelectedConversation
+                                }
+                                setToastMessage={setToastMessage}
+                            ></UserItem>
+                        );
+                    })}
+                </div>
+            </TabsContent>
+            <TabsContent
+                className="fade-in-faster flex-1 h-96 w-[460px] overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar"
+                value="blocked"
+            >
+                {blockedList.map((blocked, index) => {
+                    return (
+                        <UserItem
+                            key={index}
+                            userUid={blocked}
+                            onlyOnline={false}
+                            actionType={"blocked"}
+                            setContent={setContent}
+                            closeFriendMenu={closeFriendMenu}
+                            setSelectedConversation={setSelectedConversation}
+                            setToastMessage={setToastMessage}
+                        ></UserItem>
+                    );
+                })}
+            </TabsContent>
+            <TabsContent
+                className="flex-1 w-[460px] overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar flex flex-col gap-2 items-center justify-center"
+                value="addfriend"
+            >
+                <Input
+                    className="fade-in-faster w-80 bg-slate-300 dark:bg-slate-700 rounded-2xl mt-4 p-4"
+                    value={newFriendInput}
+                    onChange={handleNewFriendInputChange}
+                    placeholder="AwesomeUser#0001"
+                ></Input>
+                <Label
+                    className={cn(
+                        "text-red-500 text-sm font-sans antialiased fade-in-faster",
+                        fontSans.variable
+                    )}
+                >
+                    {addFriendError}
+                </Label>
+                <Button
+                    className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black fade-in-faster"
+                    onClick={handleAddNewFriend}
+                >
+                    Add Friend
+                </Button>
+            </TabsContent>
         </Tabs>
     );
 };
 
-const FriendItem = ({ userUid }) => {
-    useEffect(() => {}, []);
+const UserItem = ({
+    userUid,
+    onlyOnline,
+    actionType,
+    setContent,
+    closeFriendMenu,
+    setSelectedConversation,
+    setToastMessage,
+}) => {
+    const { toast } = useToast();
+    const auth = firebase.auth() as unknown as Auth;
+    const [user, loading, error] = useAuthState(auth);
 
-    return <div className="w-full h-20"></div>;
+    // actionType is either "friend", "blocked", "pendingIngoing" or "pendingOutgoing"
+    const [isOnline, setIsOnline] = useState(null);
+    const [userData, setUserData] = useState(null);
+    const [isBlocking, setIsBlocking] = useState(false);
+    const [isRemovingFriend, setIsRemovingFriend] = useState(false);
+
+    useEffect(() => {
+        console.log("REALTIME CHECKING RUN");
+        const getUserRealTimeStatus = async () => {
+            const userStatusDatabaseRef = database.ref(
+                `userState/${userUid}/status`
+            );
+
+            const handleStatusUpdate = (snapshot) => {
+                if (snapshot.exists()) {
+                    if (snapshot.val() === "online") {
+                        setIsOnline(true);
+                    } else {
+                        setIsOnline(false);
+                    }
+                } else {
+                    setIsOnline(false);
+                }
+            };
+
+            userStatusDatabaseRef.on("value", handleStatusUpdate);
+
+            // Clean up the listener when the component unmounts
+            return () => {
+                userStatusDatabaseRef.off("value", handleStatusUpdate);
+            };
+        };
+
+        const usersRef = firestore.collection("users");
+
+        const getUserData = async () => {
+            const userDoc = await usersRef
+                .doc(userUid)
+                .onSnapshot((snapshot) => {
+                    setUserData([
+                        snapshot.data().username,
+                        snapshot.data().tag,
+                        snapshot.data().customStatus,
+                        snapshot.data().profilePicture,
+                    ]);
+                });
+        };
+
+        getUserData();
+        getUserRealTimeStatus();
+    }, [userUid]);
+
+    const handleRemoveFriend = async () => {
+        const thisFriendDocRefId = (
+            await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("friendList")
+                .where("userUid", "==", userUid)
+                .get()
+        ).docs[0].id;
+
+        await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("friendList")
+            .doc(thisFriendDocRefId)
+            .delete();
+
+        const otherFriendDocRefId = (
+            await firestore
+                .collection("users")
+                .doc(userUid)
+                .collection("friendList")
+                .where("userUid", "==", user.uid)
+                .get()
+        ).docs[0].id;
+
+        await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("friendList")
+            .doc(otherFriendDocRefId)
+            .delete();
+
+        setIsRemovingFriend(false);
+    };
+
+    const handleBlockUser = async () => {
+        handleRemoveFriend();
+
+        await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .add({
+                userUid: userUid,
+            });
+
+        setIsBlocking(false);
+    };
+
+    const handleAcceptPending = async () => {
+        // Remove the other user's outgoing pending request first
+        const friendPendingRef = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("pendingList")
+            .where("senderUid", "==", userUid)
+            .where("receiverUid", "==", user.uid)
+            .get();
+
+        const friendPendingDocRef = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("pendingList")
+            .doc(friendPendingRef.docs[0].id);
+
+        await friendPendingDocRef.delete();
+
+        // Then remove this user's ingoing pending request
+        const userPendingRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .where("senderUid", "==", userUid)
+            .where("receiverUid", "==", user.uid)
+            .get();
+
+        const userPendingDocRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .doc(userPendingRef.docs[0].id);
+
+        await userPendingDocRef.delete();
+
+        // Finally, add each other as friends
+        await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("friendList")
+            .add({
+                userUid: user.uid,
+            });
+
+        await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("friendList")
+            .add({
+                userUid: userUid,
+            });
+
+        setToastMessage(cn("Accepted friend request from ", userData[0]));
+    };
+
+    const handleDenyPending = async () => {
+        // Remove the other user's outgoing pending request first
+        const friendPendingRef = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("pendingList")
+            .where("senderUid", "==", userUid)
+            .where("receiverUid", "==", user.uid)
+            .get();
+
+        const friendPendingDocRef = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("pendingList")
+            .doc(friendPendingRef.docs[0].id);
+
+        await friendPendingDocRef.delete();
+
+        // Then remove this user's ingoing pending request
+        const userPendingRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .where("senderUid", "==", userUid)
+            .where("receiverUid", "==", user.uid)
+            .get();
+
+        const userPendingDocRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .doc(userPendingRef.docs[0].id);
+
+        await userPendingDocRef.delete();
+
+        setToastMessage(cn("Denied friend request from ", userData[0]));
+    };
+
+    const handleCancelPending = async () => {
+        // Remove the other user's outgoing pending request first
+        const friendPendingRef = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("pendingList")
+            .where("senderUid", "==", user.uid)
+            .where("receiverUid", "==", userUid)
+            .get();
+
+        const friendPendingDocRef = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("pendingList")
+            .doc(friendPendingRef.docs[0].id);
+
+        await friendPendingDocRef.delete();
+
+        // Then remove this user's ingoing pending request
+        const userPendingRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .where("senderUid", "==", user.uid)
+            .where("receiverUid", "==", userUid)
+            .get();
+
+        const userPendingDocRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .doc(userPendingRef.docs[0].id);
+
+        await userPendingDocRef.delete();
+
+        setToastMessage(cn("Cancelled friend request to ", userData[0]));
+    };
+
+    const handleUnblockUser = async () => {
+        const blockListRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .where("userUid", "==", userUid)
+            .get();
+
+        const blockListDocRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .doc(blockListRef.docs[0].id);
+
+        await blockListDocRef.delete();
+
+        setToastMessage(cn("Removed the block on ", userData[0]));
+    };
+
+    if (onlyOnline) {
+        return (
+            <>
+                {userData === null && null}
+                {userData && isOnline === true && (
+                    <div
+                        className={
+                            "flex min-w-[460px] min-h-12 items-center justify-between px-6 py-2 gap-3 rounded-xl"
+                        }
+                    >
+                        <div className="flex justify-center items-center gap-3">
+                            <Avatar className="bg-white">
+                                <AvatarImage src={userData[3]} />
+                                <AvatarFallback>{`:(`}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col justify-center items-start">
+                                <span className="font-semibold text-black dark:text-white">
+                                    {userData[0]}
+                                </span>
+                                <span className="text-sm text-slate-600 dark:text-slate-400">
+                                    {userData[2] || "Online"}
+                                </span>
+                            </div>
+                        </div>
+                        <div>
+                            <Popover>
+                                <PopoverTrigger>
+                                    <TooltipProvider>
+                                        <Tooltip>
+                                            <TooltipTrigger>
+                                                <BiDotsVerticalRounded
+                                                    size="25"
+                                                    className="cursor-pointer hover:"
+                                                />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>Actions</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </TooltipProvider>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-40">
+                                    {actionType === "friend" && (
+                                        <div className="w-full flex flex-col items-start justify-center">
+                                            <span
+                                                onClick={() => {
+                                                    setContent([
+                                                        "conversation",
+                                                        userUid,
+                                                    ]);
+                                                    closeFriendMenu();
+                                                    setSelectedConversation(
+                                                        userUid
+                                                    );
+                                                }}
+                                                className={cn(
+                                                    "w-full p-1 dark:text-white font-bold text-sm font-sans antialiased cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                    fontSans.variable
+                                                )}
+                                            >
+                                                Chat
+                                            </span>
+                                            <Dialog
+                                                open={isBlocking}
+                                                onOpenChange={setIsBlocking}
+                                            >
+                                                <DialogTrigger className="w-full">
+                                                    <span
+                                                        className={cn(
+                                                            "w-full p-1 flex justify-start items-center text-red-500 font-bold text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        Block User
+                                                    </span>
+                                                </DialogTrigger>
+                                                <DialogContent>
+                                                    <DialogHeader className="flex flex-col gap-4">
+                                                        <DialogTitle
+                                                            className={cn(
+                                                                "dark:text-white text-xl font-sans antialiased",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            Block {userData[0]}?
+                                                        </DialogTitle>
+                                                        <DialogDescription
+                                                            className={cn(
+                                                                "dark:text-white text-xl font-sans antialiased",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            <span className="text-red text-[16px]">
+                                                                Are you sure you
+                                                                want to do this?
+                                                                This will also
+                                                                remove the user
+                                                                from your friend
+                                                                list!
+                                                            </span>
+                                                            <div className="w-full flex justify-end pt-4 gap-4">
+                                                                <Button
+                                                                    onClick={() => {
+                                                                        handleBlockUser();
+                                                                        setToastMessage(
+                                                                            cn(
+                                                                                "Blocked the user ",
+                                                                                userData[0],
+                                                                                "!"
+                                                                            )
+                                                                        );
+                                                                    }}
+                                                                    className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                >
+                                                                    Confirm
+                                                                </Button>
+                                                                <Button
+                                                                    onClick={() =>
+                                                                        setIsBlocking(
+                                                                            false
+                                                                        )
+                                                                    }
+                                                                    className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                >
+                                                                    Cancel
+                                                                </Button>
+                                                            </div>
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                </DialogContent>
+                                            </Dialog>
+                                            <Dialog>
+                                                <DialogTrigger className="w-full">
+                                                    <span
+                                                        className={cn(
+                                                            "w-full p-1 flex justify-start items-center text-red-500 font-bold text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        Remove Friend
+                                                    </span>
+                                                </DialogTrigger>
+                                                <DialogContent>
+                                                    <DialogHeader className="flex flex-col gap-4">
+                                                        <DialogTitle
+                                                            className={cn(
+                                                                "dark:text-white text-xl font-sans antialiased",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            Remove {userData[0]}{" "}
+                                                            as Friend?
+                                                        </DialogTitle>
+                                                        <DialogDescription
+                                                            className={cn(
+                                                                "dark:text-white text-xl font-sans antialiased",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            <span className="text-red text-[16px]">
+                                                                Are you sure you
+                                                                want to do this?
+                                                            </span>
+                                                            <div className="w-full flex justify-end pt-4 gap-4">
+                                                                <Button
+                                                                    onClick={() => {
+                                                                        handleRemoveFriend();
+                                                                        setToastMessage(
+                                                                            cn(
+                                                                                "Removed the user ",
+                                                                                userData[0],
+                                                                                " from the friend list!"
+                                                                            )
+                                                                        );
+                                                                    }}
+                                                                    className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                >
+                                                                    Confirm
+                                                                </Button>
+                                                                <Button className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl">
+                                                                    Cancel
+                                                                </Button>
+                                                            </div>
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+                                                </DialogContent>
+                                            </Dialog>
+                                        </div>
+                                    )}
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    </div>
+                )}
+                {(isOnline === false || isOnline === null) && null}
+            </>
+        );
+    }
+
+    return (
+        <>
+            {userData === null && null}
+            {userData && (
+                <div
+                    className={
+                        "flex min-w-[460px] min-h-12 items-center justify-between px-6 py-2 gap-3 rounded-xl"
+                    }
+                >
+                    <div className="flex justify-center items-center gap-3">
+                        <Avatar className="bg-white">
+                            <AvatarImage src={userData[3]} />
+                            <AvatarFallback>{`:(`}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col justify-center items-start">
+                            <span className="font-semibold text-black dark:text-white">
+                                {userData[0]}
+                            </span>
+                            <span className="text-sm text-slate-600 dark:text-slate-400">
+                                {isOnline ? userData[2] || "Online" : "Offline"}
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <Popover>
+                            <PopoverTrigger>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger>
+                                            <BiDotsVerticalRounded
+                                                size="25"
+                                                className="cursor-pointer hover:"
+                                            />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Actions</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-40">
+                                {actionType === "friend" && (
+                                    <div className="w-full flex flex-col items-start justify-center">
+                                        <span
+                                            onClick={() => {
+                                                setContent([
+                                                    "conversation",
+                                                    userUid,
+                                                ]);
+                                                closeFriendMenu();
+                                                setSelectedConversation(
+                                                    userUid
+                                                );
+                                            }}
+                                            className={cn(
+                                                "w-full p-1 dark:text-white font-bold text-sm font-sans antialiased cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Chat
+                                        </span>
+                                        <Dialog
+                                            open={isBlocking}
+                                            onOpenChange={setIsBlocking}
+                                        >
+                                            <DialogTrigger className="w-full">
+                                                <span
+                                                    className={cn(
+                                                        "w-full p-1 flex justify-start items-center text-red-500 font-bold text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                        fontSans.variable
+                                                    )}
+                                                >
+                                                    Block User
+                                                </span>
+                                            </DialogTrigger>
+                                            <DialogContent>
+                                                <DialogHeader className="flex flex-col gap-4">
+                                                    <DialogTitle
+                                                        className={cn(
+                                                            "dark:text-white text-xl font-sans antialiased",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        Block {userData[0]}?
+                                                    </DialogTitle>
+                                                    <DialogDescription
+                                                        className={cn(
+                                                            "dark:text-white text-xl font-sans antialiased",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        <span className="text-red text-[16px]">
+                                                            Are you sure you
+                                                            want to do this?
+                                                            This will also
+                                                            remove the user from
+                                                            your friend list!
+                                                        </span>
+                                                        <div className="w-full flex justify-end pt-4 gap-4">
+                                                            <Button
+                                                                onClick={() => {
+                                                                    handleBlockUser();
+                                                                    setToastMessage(
+                                                                        cn(
+                                                                            "Blocked the user ",
+                                                                            userData[0],
+                                                                            "!"
+                                                                        )
+                                                                    );
+                                                                }}
+                                                                className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                            >
+                                                                Confirm
+                                                            </Button>
+                                                            <Button
+                                                                onClick={() =>
+                                                                    setIsBlocking(
+                                                                        false
+                                                                    )
+                                                                }
+                                                                className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                        </div>
+                                                    </DialogDescription>
+                                                </DialogHeader>
+                                            </DialogContent>
+                                        </Dialog>
+                                        <Dialog>
+                                            <DialogTrigger className="w-full">
+                                                <span
+                                                    className={cn(
+                                                        "w-full p-1 flex justify-start items-center text-red-500 font-bold text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                        fontSans.variable
+                                                    )}
+                                                >
+                                                    Remove Friend
+                                                </span>
+                                            </DialogTrigger>
+                                            <DialogContent>
+                                                <DialogHeader className="flex flex-col gap-4">
+                                                    <DialogTitle
+                                                        className={cn(
+                                                            "dark:text-white text-xl font-sans antialiased",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        Remove {userData[0]} as
+                                                        Friend?
+                                                    </DialogTitle>
+                                                    <DialogDescription
+                                                        className={cn(
+                                                            "dark:text-white text-xl font-sans antialiased",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        <span className="text-red text-[16px]">
+                                                            Are you sure you
+                                                            want to do this?
+                                                        </span>
+                                                        <div className="w-full flex justify-end pt-4 gap-4">
+                                                            <Button
+                                                                onClick={() => {
+                                                                    handleRemoveFriend();
+                                                                    setToastMessage(
+                                                                        cn(
+                                                                            "Removed the user ",
+                                                                            userData[0],
+                                                                            " from the friend list!"
+                                                                        )
+                                                                    );
+                                                                }}
+                                                                className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                            >
+                                                                Confirm
+                                                            </Button>
+                                                            <Button className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl">
+                                                                Cancel
+                                                            </Button>
+                                                        </div>
+                                                    </DialogDescription>
+                                                </DialogHeader>
+                                            </DialogContent>
+                                        </Dialog>
+                                    </div>
+                                )}
+                                {actionType === "pendingIngoing" && (
+                                    <div className="w-full flex flex-col items-start justify-center">
+                                        <span
+                                            onClick={handleAcceptPending}
+                                            className={cn(
+                                                "w-full p-1 dark:text-white font-bold text-sm font-sans antialiased cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Accept
+                                        </span>
+                                        <span
+                                            onClick={handleDenyPending}
+                                            className={cn(
+                                                "w-full p-1 dark:text-white font-bold text-sm font-sans antialiased cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Deny
+                                        </span>
+                                    </div>
+                                )}
+                                {actionType === "pendingOutgoing" && (
+                                    <div className="w-full flex flex-col items-start justify-center">
+                                        <span
+                                            onClick={handleCancelPending}
+                                            className={cn(
+                                                "w-full p-1 dark:text-white font-bold text-sm font-sans antialiased cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Cancel
+                                        </span>
+                                    </div>
+                                )}
+                                {actionType === "blocked" && (
+                                    <div className="w-full flex flex-col items-start justify-center">
+                                        <span
+                                            onClick={handleUnblockUser}
+                                            className={cn(
+                                                "w-full p-1 dark:text-white font-bold text-sm font-sans antialiased cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Unblock
+                                        </span>
+                                    </div>
+                                )}
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </div>
+            )}
+        </>
+    );
 };
-
 export default FriendMenu;

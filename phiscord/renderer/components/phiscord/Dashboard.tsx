@@ -55,12 +55,11 @@ const Dashboard = () => {
     const [content, setContent] = useState(["welcome", null]);
 
     return (
-        <>
-            <div className="flex w-full h-screen pl-20 pt-14">
-                <DashboardNavigation setContent={setContent} />
-                <DashboardContent content={content} />
-            </div>
-        </>
+        <div className="flex w-full h-screen pl-20 pt-14">
+            <DashboardNavigation setContent={setContent} />
+            <DashboardContent content={content} />
+            <DashboardInfo></DashboardInfo>
+        </div>
     );
 };
 
@@ -72,9 +71,14 @@ const DashboardNavigation = ({ setContent }) => {
     const [userConversationIds, setUserConversationIds] = useState([]);
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
+    const [isFriendMenuOpen, setIsFriendMenuOpen] = useState(false);
 
     const [toastMessage, setToastMessage] = useState("");
     const { toast } = useToast();
+
+    const closeFriendMenu = () => {
+        setIsFriendMenuOpen(false);
+    }
 
     const handleNewChatInputChange = (e) => {
         setNewChatInput(e.target.value);
@@ -135,7 +139,13 @@ const DashboardNavigation = ({ setContent }) => {
         });
 
         if (conversationExists) {
-            setNewChatError("Conversation already exists!");
+            setNewChatError("");
+            setToastMessage(
+                "Conversation already exists! Redirecting now . . ."
+            );
+            setSelectedConversation(newChatUserId);
+            setContent(["conversation", newChatUserId]);
+            setIsCreatingNewChat(false);
             return;
         }
 
@@ -199,7 +209,7 @@ const DashboardNavigation = ({ setContent }) => {
                             </div>
                         </div>
                     </PopoverTrigger>
-                    <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-60 border-slate-500">
+                    <PopoverContent className="bg-slate-100 dark:bg-slate-900 w-60 border-slate-500">
                         <div className="flex flex-col items-center justify-center gap-4">
                             <Label
                                 className={cn(
@@ -214,14 +224,14 @@ const DashboardNavigation = ({ setContent }) => {
                                 onChange={handleNewChatInputChange}
                                 placeholder="AwesomeUser#0001"
                                 className={cn(
-                                    "dark:text-white text-sm w-48 h-8 font-sans antialiased p-2 rounded-2xl",
+                                    "dark:text-white text-sm w-48 font-sans antialiased p-4 rounded-2xl bg-slate-300 dark:bg-slate-700",
                                     fontSans.variable
                                 )}
                                 type="text"
                             ></Input>
                             <Label
                                 className={cn(
-                                    "text-red-500 text-sm font-bold font-sans antialiased",
+                                    "text-red-500 text-sm font-sans antialiased",
                                     fontSans.variable
                                 )}
                             >
@@ -229,15 +239,12 @@ const DashboardNavigation = ({ setContent }) => {
                             </Label>
                             <Button
                                 onClick={handleCreateNewChat}
-                                className="bg-slate-400 flex gap-2 items-center justify-center"
+                                className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
                             >
-                                <IoChatboxEllipsesSharp
-                                    size="20"
-                                    className="fill-white dark:fill-black"
-                                />
+                                <IoChatboxEllipsesSharp size="20" />
                                 <span
                                     className={cn(
-                                        "text-white dark:text-black text-sm font-sans antialiased",
+                                        "text-sm font-sans antialiased",
                                         fontSans.variable
                                     )}
                                 >
@@ -247,7 +254,10 @@ const DashboardNavigation = ({ setContent }) => {
                         </div>
                     </PopoverContent>
                 </Popover>
-                <Dialog>
+                <Dialog
+                    open={isFriendMenuOpen}
+                    onOpenChange={setIsFriendMenuOpen}
+                >
                     <DialogTrigger>
                         <div
                             className="flex w-52 h-10 justify-center items-center gap-2 rounded-3xl bg-slate-300 dark:bg-slate-600
@@ -270,7 +280,11 @@ const DashboardNavigation = ({ setContent }) => {
                                 Friends
                             </DialogTitle>
                             <DialogDescription>
-                                <FriendMenu></FriendMenu>
+                                <FriendMenu
+                                    setContent={setContent}
+                                    closeFriendMenu={closeFriendMenu}
+                                    setSelectedConversation={setSelectedConversation}
+                                ></FriendMenu>
                             </DialogDescription>
                         </DialogHeader>
                     </DialogContent>
@@ -365,7 +379,7 @@ const ConversationNavigationItem = ({
                 >
                     <Avatar className="bg-white">
                         <AvatarImage src={userData[3]} />
-                        <AvatarFallback>{}</AvatarFallback>
+                        <AvatarFallback>{`:(`}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col justify-center items-start">
                         <span className="font-semibold">{userData[0]}</span>
@@ -516,7 +530,7 @@ const DashboardContent = ({ content }) => {
     };
 
     const scrollToBottom = () => {
-        messagesRef.current?.scrollIntoView();
+        messagesRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
     useEffect(() => {
@@ -645,12 +659,12 @@ const DashboardContent = ({ content }) => {
     return (
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
             {content[0] === "welcome" && (
-                <div className="h-full w-full flex flex-col justify-center items-center gap-10">
+                <div className="h-full w-full flex flex-col justify-center items-center gap-4">
                     <LuBox
                         className="hover:scale-105 transition-all duration-150"
                         size={100}
                     />
-                    <div className="text-4xl font-bold">
+                    <div className="text-3xl font-bold">
                         Welcome to PHiscord
                     </div>
                 </div>
@@ -705,7 +719,7 @@ const DashboardContent = ({ content }) => {
                                         <ContextMenu>
                                             <ContextMenuTrigger>
                                                 <img
-                                                    className="max-h-60"
+                                                    className="max-h-60 rounded-xl"
                                                     src={message.file}
                                                 ></img>
                                                 <span>{message.text}</span>
@@ -796,9 +810,9 @@ const DashboardContent = ({ content }) => {
                                                     <div className="w-full flex justify-end pt-4 gap-4">
                                                         <Popover>
                                                             <PopoverTrigger>
-                                                                <MdEmojiEmotions className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white cursor-pointer" />
+                                                                <MdEmojiEmotions className="w-9 h-9 p-1 rounded-xl fill-black dark:fill-white" />
                                                             </PopoverTrigger>
-                                                            <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-60">
+                                                            <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-96">
                                                                 <EmojiPicker
                                                                     onEmojiClick={
                                                                         onEditEmojiClick
@@ -844,7 +858,7 @@ const DashboardContent = ({ content }) => {
                                                         fontSans.variable
                                                     )}
                                                 >
-                                                    <span className="text-red">
+                                                    <span className="text-red text-[16px]">
                                                         The message will be
                                                         permanently deleted from
                                                         our database! This
@@ -880,21 +894,21 @@ const DashboardContent = ({ content }) => {
                     </div>
                     <div ref={messagesRef}></div>
                     <div
-                        className="fixed flex items-start justify-start px-6 bottom-0 h-16 w-full dark:bg-slate-900 bg-slate-200 gap-4 pt-2"
+                        className="fixed flex items-start justify-start px-6 bottom-0 h-16 w-full pr-[680px] dark:bg-slate-900 bg-slate-200 gap-4 pt-2"
                         style={{ height: `calc(${textareaHeight} + 1.5rem)` }}
                     >
                         <Input
-                            className="w-9 h-9 opacity-0 absolute bg-slate-100 cursor-pointer"
+                            className="w-9 h-9 opacity-0 absolute bg-slate-100"
                             type="file"
                             onChange={handleFileChange}
                             // accept=".png, .jpg, .jpeg .gif"
                         ></Input>
-                        <FaRegFileImage className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white cursor-pointer" />
+                        <FaRegFileImage className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white z-10 cursor-pointer" />
                         <Popover>
                             <PopoverTrigger>
-                                <MdEmojiEmotions className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white cursor-pointer" />
+                                <MdEmojiEmotions className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white" />
                             </PopoverTrigger>
-                            <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-60">
+                            <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-96">
                                 <EmojiPicker onEmojiClick={onEmojiClick} />
                             </PopoverContent>
                         </Popover>
@@ -911,13 +925,11 @@ const DashboardContent = ({ content }) => {
                             onChange={handleInputChange}
                             placeholder="Type your message here."
                             rows={1}
-                            className={cn(
-                                "flex min-w-[500px] min-h-10 rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-slate-300 dark:bg-slate-700 resize-none no-scrollbar no-scrollbar::-webkit-scrollbar"
-                            )}
+                            className="flex-1 min-w-[200px] rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-slate-300 dark:bg-slate-700 resize-none no-scrollbar no-scrollbar::-webkit-scrollbar"
                         ></TextareaAutosize>
                         <Button
                             onClick={handleSendMessage}
-                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                            className="bg-slate-900 text-white hover:text-black hover:bg-white dark:hover:bg-slate-200 rounded-xl"
                         >
                             Send
                         </Button>
@@ -933,6 +945,12 @@ const DashboardContent = ({ content }) => {
                 </div>
             )}
         </div>
+    );
+};
+
+const DashboardInfo = () => {
+    return (
+        <div className="z-10 h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2"></div>
     );
 };
 

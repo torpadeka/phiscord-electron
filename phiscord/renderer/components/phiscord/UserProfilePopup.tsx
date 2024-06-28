@@ -31,14 +31,14 @@ const UserProfilePopup = ({ serverId, userUid }) => {
     }, []);
 
     return (
-        <div className="w-32 h-56 bg-slate-300 dark:bg-slate-900 flex flex-col items-center justify-start pt-2 gap-4">
+        <div className="min-w-40 h-56 bg-slate-300 dark:bg-slate-900 flex flex-col items-center justify-start pt-2 gap-4">
             {userData && (
                 <>
                     <Avatar className="bg-white w-20 h-20">
                         <AvatarImage src={userData[2]} />
                         <AvatarFallback>{`:(`}</AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col justify-center items-center">
+                    <div className="flex flex-col justify-center items-center w-full">
                         <span
                             className={cn(
                                 "dark:text-white text-2xl font-sans font-semibold antialiased",
