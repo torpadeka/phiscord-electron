@@ -8,9 +8,9 @@ import { Inter as FontSans } from "next/font/google";
 import { cn } from "@/lib/utils";
 
 import { LuBox } from "react-icons/lu";
-import { FaPlus } from "react-icons/fa6";
+import { FaFile, FaPlus } from "react-icons/fa6";
 import { IoChatboxEllipsesSharp } from "react-icons/io5";
-import { FaRegFileImage, FaUserFriends } from "react-icons/fa";
+import { FaUserFriends } from "react-icons/fa";
 import { MdEmojiEmotions } from "react-icons/md";
 
 import EmojiPicker from "emoji-picker-react";
@@ -78,7 +78,7 @@ const DashboardNavigation = ({ setContent }) => {
 
     const closeFriendMenu = () => {
         setIsFriendMenuOpen(false);
-    }
+    };
 
     const handleNewChatInputChange = (e) => {
         setNewChatInput(e.target.value);
@@ -283,7 +283,9 @@ const DashboardNavigation = ({ setContent }) => {
                                 <FriendMenu
                                     setContent={setContent}
                                     closeFriendMenu={closeFriendMenu}
-                                    setSelectedConversation={setSelectedConversation}
+                                    setSelectedConversation={
+                                        setSelectedConversation
+                                    }
                                 ></FriendMenu>
                             </DialogDescription>
                         </DialogHeader>
@@ -407,9 +409,11 @@ const DashboardContent = ({ content }) => {
     interface Message {
         senderUid: string;
         isFileType: boolean;
+        isImageType: boolean;
         text: string | null;
         createdAt: firebase.firestore.Timestamp;
         file: string | null;
+        fileName: string | null;
         messageId: string | null;
         edited: boolean;
     }
@@ -483,11 +487,14 @@ const DashboardContent = ({ content }) => {
                                         getUserData(messageData.senderUid);
                                         return {
                                             senderUid: messageData.senderUid,
-                                            isFileType: messageData.type,
+                                            isFileType: messageData.isFileType,
+                                            isImageType:
+                                                messageData.isImageType,
+                                            fileName: messageData.fileName,
                                             text: messageData.text,
                                             createdAt: messageData.createdAt,
                                             file: messageData.file,
-                                            messageId: messageData.messageId,
+                                            messageId: messageDoc.id,
                                             edited: messageData.edited,
                                         };
                                     });
@@ -549,23 +556,32 @@ const DashboardContent = ({ content }) => {
                 `messages/${conversationId}/${file.name}`
             );
 
+            const isImage = file.type.startsWith("image/");
+
             await fileRef.put(file);
             const fileUrl = await fileRef.getDownloadURL();
 
             const newMessage = {
                 senderUid: user.uid,
                 isFileType: true,
+                isImageType: isImage,
                 text: null,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                messageId: null,
                 file: fileUrl,
+                fileName: file.name,
                 edited: false,
             };
 
-            await firestore
+            const newMessageDocRef = await firestore
                 .collection("conversations")
                 .doc(conversationId)
                 .collection("messages")
                 .add(newMessage);
+
+            await newMessageDocRef.update({
+                messageId: newMessageDocRef.id,
+            });
         }
     };
 
@@ -574,9 +590,11 @@ const DashboardContent = ({ content }) => {
             const newMessage = {
                 senderUid: user.uid,
                 isFileType: false,
+                isImageType: false,
                 text: inputValue,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 file: null,
+                fileName: null,
                 edited: false,
             };
 
@@ -641,6 +659,16 @@ const DashboardContent = ({ content }) => {
     };
 
     const handleConfirmDeleteMessage = async () => {
+        const messageRef = await firestore
+            .collection("conversations")
+            .doc(conversationId)
+            .collection("messages")
+            .doc(deletingMessage[1])
+            .get();
+
+        const isFileType = messageRef.data().isFileType;
+        const file = messageRef.data().file;
+
         await firestore
             .collection("conversations")
             .doc(conversationId)
@@ -648,12 +676,24 @@ const DashboardContent = ({ content }) => {
             .doc(deletingMessage[1])
             .delete();
 
+        if (isFileType) {
+            const messageFileRef = storage.refFromURL(file);
+            await messageFileRef.delete();
+        }
+
         setDeletingMessage([false, ""]);
     };
 
     const canModifyMessage = (messageSenderUid) => {
         if (messageSenderUid === user.uid) return true;
         return false;
+    };
+
+    const truncateString = (str, num) => {
+        if (str.length <= num) {
+            return str;
+        }
+        return str.slice(0, num) + "...";
     };
 
     return (
@@ -711,17 +751,61 @@ const DashboardContent = ({ content }) => {
                                         </PopoverContent>
                                     </Popover>
                                     <div className="flex flex-col items-start justify-center">
-                                        <span>
+                                        <span className="font-bold text-black dark:text-white">
                                             {senderData
                                                 ? senderData.username
                                                 : "Loading..."}
                                         </span>
                                         <ContextMenu>
                                             <ContextMenuTrigger>
-                                                <img
-                                                    className="max-h-60 rounded-xl"
-                                                    src={message.file}
-                                                ></img>
+                                                {message.isFileType &&
+                                                    message.isImageType && (
+                                                        <div className="flex flex-col gap-2 items-start">
+                                                            <a
+                                                                href={
+                                                                    message.file
+                                                                }
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                            >
+                                                                <img
+                                                                    className="max-h-60 rounded-xl"
+                                                                    src={
+                                                                        message.file
+                                                                    }
+                                                                ></img>
+                                                            </a>
+                                                            <div className="text-sm italic">
+                                                                {truncateString(
+                                                                    message.fileName,
+                                                                    50
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                {message.isFileType &&
+                                                    !message.isImageType && (
+                                                        <div className="flex flex-col gap-2 items-start">
+                                                            <a
+                                                                href={
+                                                                    message.file
+                                                                }
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                            >
+                                                                <FaFile
+                                                                    className="m-2"
+                                                                    size={70}
+                                                                />
+                                                            </a>
+                                                            <div className="text-sm italic">
+                                                                {truncateString(
+                                                                    message.fileName,
+                                                                    50
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 <span>{message.text}</span>
                                                 {message.edited && (
                                                     <div className="text-[10px]">
@@ -897,13 +981,16 @@ const DashboardContent = ({ content }) => {
                         className="fixed flex items-start justify-start px-6 bottom-0 h-16 w-full pr-[680px] dark:bg-slate-900 bg-slate-200 gap-4 pt-2"
                         style={{ height: `calc(${textareaHeight} + 1.5rem)` }}
                     >
-                        <Input
-                            className="w-9 h-9 opacity-0 absolute bg-slate-100"
-                            type="file"
-                            onChange={handleFileChange}
-                            // accept=".png, .jpg, .jpeg .gif"
-                        ></Input>
-                        <FaRegFileImage className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white z-10 cursor-pointer" />
+                        <div>
+                            <label className="cursor-pointer inline-block bg-slate-200 dark:bg-slate-900 w-7 h-7 p-1 fill-black dark:fill-white z-10">
+                                <input
+                                    type="file"
+                                    className="hidden"
+                                    onChange={handleFileChange}
+                                />
+                                <FaFile className="bg-slate-200 dark:bg-slate-900 w-6 h-6 pt-[1px] fill-black dark:fill-white cursor-pointer" />
+                            </label>
+                        </div>
                         <Popover>
                             <PopoverTrigger>
                                 <MdEmojiEmotions className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white" />
