@@ -410,6 +410,7 @@ const DashboardContent = ({ content }) => {
         senderUid: string;
         isFileType: boolean;
         isImageType: boolean;
+        isVideoType: boolean;
         text: string | null;
         createdAt: firebase.firestore.Timestamp;
         file: string | null;
@@ -425,7 +426,10 @@ const DashboardContent = ({ content }) => {
     const [userData, setUserData] = useState<Record<string, any>>({});
     const [inputValue, setInputValue] = useState("");
     const [conversationId, setConversationId] = useState("");
+    const [isOutgoingBlocked, setIsOutgoingBlocked] = useState(false);
+    const [isIngoingBlocked, setIsIngoingBlocked] = useState(false);
     const [textareaHeight, setTextareaHeight] = useState("2.5rem");
+    const [emojiOpen, setEmojiOpen] = useState(false);
     const textareaRef = useRef(null);
     const messagesRef = useRef(null);
     const [editingMessage, setEditingMessage] = useState<
@@ -479,37 +483,87 @@ const DashboardContent = ({ content }) => {
                         setConversationId(conversation.id);
                         const messageRef =
                             conversation.ref.collection("messages");
-                        messageRef.orderBy("createdAt", "asc").onSnapshot(
-                            (snapshot) => {
-                                const messagesList: Message[] =
-                                    snapshot.docs.map((messageDoc) => {
-                                        const messageData = messageDoc.data();
-                                        getUserData(messageData.senderUid);
-                                        return {
-                                            senderUid: messageData.senderUid,
-                                            isFileType: messageData.isFileType,
-                                            isImageType:
-                                                messageData.isImageType,
-                                            fileName: messageData.fileName,
-                                            text: messageData.text,
-                                            createdAt: messageData.createdAt,
-                                            file: messageData.file,
-                                            messageId: messageDoc.id,
-                                            edited: messageData.edited,
+                        const unsubscribe = messageRef
+                            .orderBy("createdAt", "asc")
+                            .onSnapshot(
+                                (snapshot) => {
+                                    const messagesList: Message[] =
+                                        snapshot.docs.map((messageDoc) => {
+                                            const messageData =
+                                                messageDoc.data();
+                                            getUserData(messageData.senderUid);
+                                            return {
+                                                senderUid:
+                                                    messageData.senderUid,
+                                                isFileType:
+                                                    messageData.isFileType,
+                                                isImageType:
+                                                    messageData.isImageType,
+                                                isVideoType:
+                                                    messageData.isVideoType,
+                                                fileName: messageData.fileName,
+                                                text: messageData.text,
+                                                createdAt:
+                                                    messageData.createdAt,
+                                                file: messageData.file,
+                                                messageId: messageDoc.id,
+                                                edited: messageData.edited,
+                                            };
+                                        });
+                                    setMessages(messagesList);
+                                    setLoading(false);
+                                    console.log(
+                                        "Messages loaded:",
+                                        messagesList
+                                    );
+
+                                    const checkBlocked = () => {
+                                        const unsubscribeIngoing = firestore
+                                            .collection("users")
+                                            .doc(content[1])
+                                            .collection("blockedList")
+                                            .where("userUid", "==", user.uid)
+                                            .onSnapshot((snapshot) => {
+                                                if (!snapshot.empty) {
+                                                    setIsIngoingBlocked(true);
+                                                } else {
+                                                    setIsIngoingBlocked(false); // Fixed typo here
+                                                }
+                                            });
+
+                                        const unsubscribeOutgoing = firestore
+                                            .collection("users")
+                                            .doc(user.uid)
+                                            .collection("blockedList")
+                                            .where("userUid", "==", content[1])
+                                            .onSnapshot((snapshot) => {
+                                                if (!snapshot.empty) {
+                                                    setIsOutgoingBlocked(true);
+                                                } else {
+                                                    setIsOutgoingBlocked(false);
+                                                }
+                                            });
+
+                                        return () => {
+                                            unsubscribeIngoing();
+                                            unsubscribeOutgoing();
                                         };
-                                    });
-                                setMessages(messagesList);
-                                setLoading(false);
-                                console.log("Messages loaded:", messagesList);
-                            },
-                            (error) => {
-                                console.error(
-                                    "Error fetching messages:",
-                                    error
-                                );
-                                setLoading(false);
-                            }
-                        );
+                                    };
+
+                                    const unsubscribe = checkBlocked();
+
+                                    return unsubscribe;
+                                },
+                                (error) => {
+                                    console.error(
+                                        "Error fetching messages:",
+                                        error
+                                    );
+                                    setLoading(false);
+                                }
+                            );
+
+                        return unsubscribe;
                     } else {
                         console.error("Conversation not found");
                         setLoading(false);
@@ -557,6 +611,7 @@ const DashboardContent = ({ content }) => {
             );
 
             const isImage = file.type.startsWith("image/");
+            const isVideo = file.type.startsWith("video/");
 
             await fileRef.put(file);
             const fileUrl = await fileRef.getDownloadURL();
@@ -565,6 +620,7 @@ const DashboardContent = ({ content }) => {
                 senderUid: user.uid,
                 isFileType: true,
                 isImageType: isImage,
+                isVideoType: isVideo,
                 text: null,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 messageId: null,
@@ -591,6 +647,7 @@ const DashboardContent = ({ content }) => {
                 senderUid: user.uid,
                 isFileType: false,
                 isImageType: false,
+                isVideoType: false,
                 text: inputValue,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 file: null,
@@ -759,7 +816,8 @@ const DashboardContent = ({ content }) => {
                                         <ContextMenu>
                                             <ContextMenuTrigger>
                                                 {message.isFileType &&
-                                                    message.isImageType && (
+                                                    message.isImageType &&
+                                                    !message.isVideoType && (
                                                         <div className="flex flex-col gap-2 items-start">
                                                             <a
                                                                 href={
@@ -784,7 +842,27 @@ const DashboardContent = ({ content }) => {
                                                         </div>
                                                     )}
                                                 {message.isFileType &&
-                                                    !message.isImageType && (
+                                                    !message.isImageType &&
+                                                    message.isVideoType && (
+                                                        <div className="flex flex-col gap-2 items-start">
+                                                            <video
+                                                                className="max-h-60 rounded-xl"
+                                                                src={
+                                                                    message.file
+                                                                }
+                                                                controls={true}
+                                                            ></video>
+                                                            <div className="text-sm italic">
+                                                                {truncateString(
+                                                                    message.fileName,
+                                                                    50
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                {message.isFileType &&
+                                                    !message.isImageType &&
+                                                    !message.isVideoType && (
                                                         <div className="flex flex-col gap-2 items-start">
                                                             <a
                                                                 href={
@@ -821,31 +899,39 @@ const DashboardContent = ({ content }) => {
                                             >
                                                 {(canModifyMessage(
                                                     message.senderUid
-                                                ) && (
-                                                    <>
-                                                        {!message.file && (
+                                                ) &&
+                                                    (isIngoingBlocked ||
+                                                    isOutgoingBlocked ? (
+                                                        <span className="text-red-600">
+                                                            Cannot modify
+                                                            messages when
+                                                            blocked!
+                                                        </span>
+                                                    ) : (
+                                                        <>
+                                                            {!message.file && (
+                                                                <ContextMenuItem
+                                                                    onClick={() => {
+                                                                        handleEditMessageClick(
+                                                                            message.messageId,
+                                                                            message.text
+                                                                        );
+                                                                    }}
+                                                                >
+                                                                    Edit Message
+                                                                </ContextMenuItem>
+                                                            )}
                                                             <ContextMenuItem
                                                                 onClick={() => {
-                                                                    handleEditMessageClick(
-                                                                        message.messageId,
-                                                                        message.text
+                                                                    handleDeleteMessageClick(
+                                                                        message.messageId
                                                                     );
                                                                 }}
                                                             >
-                                                                Edit Message
+                                                                Delete Message
                                                             </ContextMenuItem>
-                                                        )}
-                                                        <ContextMenuItem
-                                                            onClick={() => {
-                                                                handleDeleteMessageClick(
-                                                                    message.messageId
-                                                                );
-                                                            }}
-                                                        >
-                                                            Delete Message
-                                                        </ContextMenuItem>
-                                                    </>
-                                                )) || (
+                                                        </>
+                                                    ))) || (
                                                     <span className="text-red-600">
                                                         You can't modify this
                                                         message!
@@ -982,18 +1068,55 @@ const DashboardContent = ({ content }) => {
                         style={{ height: `calc(${textareaHeight} + 1.5rem)` }}
                     >
                         <div>
-                            <label className="cursor-pointer inline-block bg-slate-200 dark:bg-slate-900 w-7 h-7 p-1 fill-black dark:fill-white z-10">
+                            <label
+                                className={cn(
+                                    "inline-block bg-slate-200 dark:bg-slate-900 w-7 h-7 p-1 fill-black dark:fill-white z-10 cursor-",
+                                    isIngoingBlocked || isOutgoingBlocked
+                                        ? "not-allowed"
+                                        : "pointer"
+                                )}
+                            >
                                 <input
                                     type="file"
                                     className="hidden"
+                                    disabled={
+                                        isOutgoingBlocked || isIngoingBlocked
+                                    }
                                     onChange={handleFileChange}
                                 />
-                                <FaFile className="bg-slate-200 dark:bg-slate-900 w-6 h-6 pt-[1px] fill-black dark:fill-white cursor-pointer" />
+                                <FaFile
+                                    className={cn(
+                                        "bg-slate-200 dark:bg-slate-900 w-6 h-6 pt-[1px] fill-black dark:fill-white",
+                                        {
+                                            "cursor-not-allowed":
+                                                isIngoingBlocked ||
+                                                isOutgoingBlocked,
+                                            "cursor-pointer": !(
+                                                isIngoingBlocked ||
+                                                isOutgoingBlocked
+                                            ),
+                                        }
+                                    )}
+                                />
                             </label>
                         </div>
-                        <Popover>
+                        <Popover
+                            open={
+                                isOutgoingBlocked || isIngoingBlocked
+                                    ? false
+                                    : emojiOpen
+                            }
+                            onOpenChange={setEmojiOpen}
+                        >
                             <PopoverTrigger>
-                                <MdEmojiEmotions className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white" />
+                                <MdEmojiEmotions
+                                    cursor={
+                                        isIngoingBlocked || isOutgoingBlocked
+                                            ? "not-allowed"
+                                            : "pointer"
+                                    }
+                                    className="bg-slate-200 dark:bg-slate-900 w-9 h-9 p-1 rounded-xl fill-black dark:fill-white"
+                                />
                             </PopoverTrigger>
                             <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-96">
                                 <EmojiPicker onEmojiClick={onEmojiClick} />
@@ -1010,13 +1133,31 @@ const DashboardContent = ({ content }) => {
                                 }
                             }}
                             onChange={handleInputChange}
-                            placeholder="Type your message here."
+                            disabled={isIngoingBlocked || isOutgoingBlocked}
+                            placeholder={
+                                isIngoingBlocked
+                                    ? isOutgoingBlocked
+                                        ? "You have blocked this user."
+                                        : "This user has blocked you."
+                                    : isOutgoingBlocked
+                                    ? "You have blocked this user."
+                                    : "Type your message here."
+                            }
                             rows={1}
                             className="flex-1 min-w-[200px] rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-slate-300 dark:bg-slate-700 resize-none no-scrollbar no-scrollbar::-webkit-scrollbar"
                         ></TextareaAutosize>
                         <Button
                             onClick={handleSendMessage}
-                            className="bg-slate-900 text-white hover:text-black hover:bg-white dark:hover:bg-slate-200 rounded-xl"
+                            className={cn(
+                                "bg-slate-900 text-white hover:text-black hover:bg-white dark:hover:bg-slate-200 rounded-xl cursor-",
+                                {
+                                    "cursor-not-allowed":
+                                        isIngoingBlocked || isOutgoingBlocked,
+                                    "cursor-pointer": !(
+                                        isIngoingBlocked || isOutgoingBlocked
+                                    ),
+                                }
+                            )}
                         >
                             Send
                         </Button>

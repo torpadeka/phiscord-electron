@@ -10,14 +10,14 @@ import Dashboard from "@/components/phiscord/Dashboard";
 import UserProfileBox from "@/components/phiscord/UserProfileBox";
 
 const HomePage = () => {
-    const [activePage, setActivePage] = useState("dashboard");
+    const [activePage, setActivePage] = useState(["dashboard", null]);
 
     return (
         <div className="fade-in">
             <TopBar />
-            <SideBar onIconClick={setActivePage} />
+            <SideBar setActivePage={setActivePage} />
             <div className="content">
-                {activePage === "dashboard" && <Dashboard />}
+                {activePage[0] === "dashboard" && <Dashboard />}
                 <UserProfileBox />
             </div>
         </div>
