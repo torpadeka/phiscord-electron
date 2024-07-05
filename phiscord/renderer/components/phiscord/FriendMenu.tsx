@@ -415,12 +415,12 @@ const FriendMenu = ({
                 className="fade-in-faster flex-1 h-96 w-[460px] overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar"
                 value="pending"
             >
-                <div className="w-full flex items-center justify-center text-[16px] py-2">
+                <div className="w-full flex items-center justify-center text-[16px] py-2 text-black dark:text-white font-bold">
                     Ingoing Friend Requests
                 </div>
                 <div className="h-36">
                     {!ingoingPendingList[0] && (
-                        <span className="text-sm text-black dark:text-white font-bold w-full h-full flex items-center justify-center">
+                        <span className="text-sm w-full h-full flex items-center justify-center">
                             No one has requested you to be friends
                         </span>
                     )}
@@ -441,12 +441,12 @@ const FriendMenu = ({
                         );
                     })}
                 </div>
-                <div className="fade-in-faster w-full flex items-center justify-center text-[16px] py-2">
+                <div className="fade-in-faster w-full flex items-center justify-center text-[16px] py-2 text-black dark:text-white font-bold">
                     Outgoing Friend Requests
                 </div>
-                <div className="h-24">
+                <div className="h-36">
                     {!outgoingPendingList[0] && (
-                        <span className="text-sm text-black dark:text-white font-bold w-full h-full flex items-center justify-center">
+                        <span className="text-sm w-full h-full flex items-center justify-center">
                             You haven't requested anyone to be friends
                         </span>
                     )}

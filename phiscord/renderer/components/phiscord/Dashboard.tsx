@@ -11,7 +11,7 @@ import { LuBox } from "react-icons/lu";
 import { FaFile, FaPlus } from "react-icons/fa6";
 import { IoChatboxEllipsesSharp } from "react-icons/io5";
 import { FaUserFriends } from "react-icons/fa";
-import { MdEmojiEmotions } from "react-icons/md";
+import { MdCall, MdCallEnd, MdEmojiEmotions } from "react-icons/md";
 
 import EmojiPicker from "emoji-picker-react";
 
@@ -46,24 +46,59 @@ import UserProfilePopup from "./UserProfilePopup";
 import TextareaAutosize from "react-textarea-autosize";
 import FriendMenu from "./FriendMenu";
 
+import {
+    IAgoraRTCRemoteUser,
+    ILocalVideoTrack,
+    IRemoteVideoTrack,
+} from "agora-rtc-sdk-ng";
+
 const fontSans = FontSans({
     subsets: ["latin"],
     variable: "--font-sans",
 });
 
-const Dashboard = () => {
+const Dashboard = ({
+    inCall,
+    setInCall,
+    channelName,
+    setChannelName,
+    users,
+    localTracks,
+    leaveCall,
+}) => {
     const [content, setContent] = useState(["welcome", null]);
 
     return (
-        <div className="flex w-full h-screen pl-20 pt-14">
-            <DashboardNavigation setContent={setContent} />
-            <DashboardContent content={content} />
-            <DashboardInfo></DashboardInfo>
-        </div>
+        <>
+            <div className="flex w-full h-screen pl-20 pt-14">
+                <DashboardNavigation setContent={setContent} />
+                <DashboardContent
+                    content={content}
+                    inCall={inCall}
+                    setInCall={setInCall}
+                    channelName={channelName}
+                    setChannelName={setChannelName}
+                    users={users}
+                    localTracks={localTracks}
+                    leaveCall={leaveCall}
+                />
+                <DashboardInfo
+                    content={content}
+                    inCall={inCall}
+                    setInCall={setInCall}
+                    channelName={channelName}
+                    setChannelName={setChannelName}
+                    users={users}
+                    localTracks={localTracks}
+                    leaveCall={leaveCall}
+                ></DashboardInfo>
+            </div>
+        </>
     );
 };
 
 const DashboardNavigation = ({ setContent }) => {
+    const [loading, setLoading] = useState(true);
     const auth = firebase.auth() as unknown as Auth;
     const [user] = useAuthState(auth);
     const [newChatInput, setNewChatInput] = useState("");
@@ -165,6 +200,7 @@ const DashboardNavigation = ({ setContent }) => {
             .where("userIds", "array-contains", user.uid)
             .orderBy("lastChanged", "desc")
             .onSnapshot((snapshot) => {
+                setLoading(true);
                 const userIds = [];
                 snapshot.forEach((doc) => {
                     const ids = doc.data().userIds;
@@ -175,6 +211,7 @@ const DashboardNavigation = ({ setContent }) => {
                     }
                 });
                 setUserConversationIds(userIds);
+                setLoading(false);
             });
 
         return () => unsubscribe();
@@ -210,7 +247,7 @@ const DashboardNavigation = ({ setContent }) => {
                         </div>
                     </PopoverTrigger>
                     <PopoverContent className="bg-slate-100 dark:bg-slate-900 w-60 border-slate-500">
-                        <div className="flex flex-col items-center justify-center gap-4">
+                        <div className="flex flex-col items-center justify-center gap-3">
                             <Label
                                 className={cn(
                                     "dark:text-white text-sm font-sans antialiased",
@@ -292,15 +329,25 @@ const DashboardNavigation = ({ setContent }) => {
                     </DialogContent>
                 </Dialog>
                 <div className="flex flex-col">
-                    {userConversationIds.map((id) => (
-                        <ConversationNavigationItem
-                            key={id}
-                            setContent={setContent}
-                            userId={id}
-                            selected={selectedConversation === id}
-                            setSelected={setSelectedConversation}
-                        ></ConversationNavigationItem>
-                    ))}
+                    {loading && (
+                        <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center gap-4 mt-10">
+                            <AiOutlineLoading
+                                className="animate-spin"
+                                size="30"
+                            />
+                            <span>Loading...</span>
+                        </div>
+                    )}
+                    {!loading &&
+                        userConversationIds.map((id) => (
+                            <ConversationNavigationItem
+                                key={id}
+                                setContent={setContent}
+                                userId={id}
+                                selected={selectedConversation === id}
+                                setSelected={setSelectedConversation}
+                            ></ConversationNavigationItem>
+                        ))}
                 </div>
             </div>
         </div>
@@ -405,7 +452,16 @@ const ConversationNavigationItem = ({
     );
 };
 
-const DashboardContent = ({ content }) => {
+const DashboardContent = ({
+    content,
+    inCall,
+    setInCall,
+    channelName,
+    setChannelName,
+    users,
+    localTracks,
+    leaveCall,
+}) => {
     interface Message {
         senderUid: string;
         isFileType: boolean;
@@ -439,6 +495,27 @@ const DashboardContent = ({ content }) => {
         false,
         "",
     ]);
+
+    
+
+    const localVideoRef = useRef(null);
+    const remoteVideoRefs = useRef({});
+
+    useEffect(() => {
+        console.log("RENDERING LOCAL 1");
+        if (localTracks.cameraTrack && localVideoRef.current) {
+            localTracks.cameraTrack.play(localVideoRef.current);
+        }
+        console.log("RENDERING LOCAL 2");
+    }, [localTracks.cameraTrack, conversationId]);
+
+    useEffect(() => {
+        users.forEach((user) => {
+            if (user.videoTrack && remoteVideoRefs.current[user.uid]) {
+                user.videoTrack.play(remoteVideoRefs.current[user.uid]);
+            }
+        });
+    }, [users, conversationId]);
 
     useEffect(() => {
         if (content[0] !== "conversation") {
@@ -755,6 +832,24 @@ const DashboardContent = ({ content }) => {
 
     return (
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
+            {inCall && channelName === conversationId && (
+                <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-400 flex justify-center items-center">
+                    <div className="local-video w-min h-min rounded-xl border-slate-300 border-4">
+                        <div ref={localVideoRef} className="video-player"></div>
+                    </div>
+                    <div className="remote-videos">
+                        {users.map((user) => (
+                            <div
+                                key={user.uid}
+                                ref={(el) => {
+                                    remoteVideoRefs.current[user.uid] = el;
+                                }}
+                                className="video-player"
+                            ></div>
+                        ))}
+                    </div>
+                </div>
+            )}
             {content[0] === "welcome" && (
                 <div className="h-full w-full flex flex-col justify-center items-center gap-4">
                     <LuBox
@@ -1176,9 +1271,127 @@ const DashboardContent = ({ content }) => {
     );
 };
 
-const DashboardInfo = () => {
+const DashboardInfo = ({
+    content,
+    inCall,
+    setInCall,
+    channelName,
+    setChannelName,
+    users,
+    localTracks,
+    leaveCall,
+}) => {
+    const auth = firebase.auth() as unknown as Auth;
+    const [user] = useAuthState(auth);
+
+    const [userData, setUserData] = useState(null);
+    const [conversationId, setConversationId] = useState<string | null>(null);
+    
+    useEffect(() => {
+        const unsubscribe = firestore
+            .collection("conversations")
+            .where("userIds", "array-contains", user.uid)
+            .onSnapshot(
+                (snapshot) => {
+                    let conversation = null;
+                    snapshot.forEach((doc) => {
+                        if (doc.data().userIds.includes(content[1])) {
+                            conversation = doc;
+                        }
+                    });
+
+                    if (conversation) {
+                        console.log("Conversation found:", conversation.id);
+                        setConversationId(conversation.id);
+                    } else {
+                        console.error("Conversation not found");
+                    }
+                },
+                (error) => {
+                    console.error("Error fetching conversations:", error);
+                }
+            );
+
+        return () => unsubscribe();
+    }, [content]);
+
+    useEffect(() => {
+        if (content[1] !== null) {
+            const userDoc = firestore.collection("users").doc(content[1]).get();
+
+            const getUserData = async () => {
+                setUserData([
+                    (await userDoc).data().username,
+                    (await userDoc).data().tag,
+                    (await userDoc).data().profilePicture,
+                    (await userDoc).data().customStatus,
+                ]);
+            };
+
+            getUserData();
+        }
+    }, [content]);
+
     return (
-        <div className="z-10 h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2"></div>
+        <div className="z-10 h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2">
+            {userData && (
+                <>
+                    <div className="min-w-40 h-56 mt-10 flex flex-col items-center justify-start pt-2 gap-4">
+                        <>
+                            <Avatar className="bg-white w-20 h-20">
+                                <AvatarImage src={userData[2]} />
+                                <AvatarFallback>{`:(`}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col justify-center items-center w-full">
+                                <span
+                                    className={cn(
+                                        "dark:text-white text-2xl font-sans font-semibold antialiased",
+                                        fontSans.variable
+                                    )}
+                                >
+                                    {userData[0]}
+                                </span>
+                                <span
+                                    className={cn(
+                                        "dark:text-slate-400 text-slate-700 text-sm font-sans antialiased",
+                                        fontSans.variable
+                                    )}
+                                >
+                                    #{userData[1]}
+                                </span>
+                            </div>
+                            <span
+                                className={cn(
+                                    "dark:text-white text-sm font-sans antialiased",
+                                    fontSans.variable
+                                )}
+                            >
+                                {userData[3]}
+                            </span>
+                        </>
+                    </div>
+                    {conversationId && (
+                        <div className="w-full flex items-center justify-center gap-4">
+                            <div
+                                onClick={() => {
+                                    setChannelName(conversationId);
+                                    setInCall(true);
+                                }}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                            >
+                                <MdCall />
+                            </div>
+                            <div
+                                onClick={leaveCall}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                            >
+                                <MdCallEnd />
+                            </div>
+                        </div>
+                    )}
+                </>
+            )}
+        </div>
     );
 };
 

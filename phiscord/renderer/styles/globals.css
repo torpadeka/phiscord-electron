@@ -24,7 +24,7 @@
     body,
     #__next,
     #app {
-        @apply h-screen w-screen bg-slate-950
+        @apply h-screen w-screen bg-slate-950;
     }
 
     .fade-in {
@@ -33,6 +33,20 @@
 
     .fade-in-faster {
         animation: fadeIn 0.25s ease-in;
+    }
+
+    .video-player {
+        width: 320px;
+        height: 180px;
+        overflow: hidden;
+        border-radius: 0.6rem; /* This applies the rounded corners */
+        border: none;
+        position: relative; /* Ensure proper positioning */
+    }
+
+    .video-player video {
+        width: 100%;
+        height: 100%;
     }
 
     @keyframes fadeIn {
