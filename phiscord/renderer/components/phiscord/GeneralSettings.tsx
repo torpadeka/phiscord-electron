@@ -38,7 +38,13 @@ const GeneralSettings = () => {
                 `profilePictures/${user.uid}/${file.name}`
             );
 
-            if (profilePicture != await storage.ref().child("phiscord_default_pfp.PNG").getDownloadURL()) {
+            if (
+                profilePicture !=
+                (await storage
+                    .ref()
+                    .child("phiscord_default_pfp.PNG")
+                    .getDownloadURL())
+            ) {
                 const prevFileRef = storage.refFromURL(profilePicture);
                 await prevFileRef.delete();
             }
@@ -56,23 +62,25 @@ const GeneralSettings = () => {
     };
 
     return (
-        <div className="w-full h-full flex items-center justify-start gap-8 mt-10">
+        <div className="w-full h-full flex items-center justify-start gap-8">
             <div className="flex flex-col items-center justify-center gap-8">
                 <Avatar className="bg-white w-40 h-40">
                     <AvatarImage src={profilePicture} />
                     <AvatarFallback>{`:(`}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col items-center justify-center gap-4">
-                    <Label className="text-white text-2xl">
+                    <Label className="text-black dark:text-white text-xl">
                         Set Profile Picture
                     </Label>
+
                     <Input
-                        className="w-56 bg-slate-200 rounded-3xl cursor-pointer hover:scale-105 transition-all text-black"
+                        className="flex w-56 h-10 justify-center items-center gap-2 rounded-3xl bg-slate-300 dark:bg-slate-600
+                                        hover:scale-105 hover:brightness-125 transition-all shadow-md cursor-pointer"
                         onChange={handleFileChange}
                         type="file"
                     ></Input>
                     <Button
-                        className="w-40 rounded-3xl text-sm"
+                        className="w-44 bg-slate-900 text-white hover:text-black hover:bg-white dark:hover:bg-slate-200 rounded-3xl cursor-pointer shadow-md"
                         onClick={handleProfileImageUpload}
                     >
                         Upload Profile Image

@@ -20,6 +20,7 @@ import { FaPlus } from "react-icons/fa6";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
+import { IoPrismSharp } from "react-icons/io5";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -75,13 +76,8 @@ const SideBar = ({ setActivePage }) => {
 
         setCreateNewServerError("");
 
-        const serverPicture = await storage
-            .ref()
-            .child("phiscord_default_pfp.PNG")
-            .getDownloadURL();
-
         const newServerRef = await firestore.collection("servers").add({
-            serverPicture: serverPicture,
+            serverPicture: null,
             serverName: newServerName,
             ownerUid: user.uid,
             adminList: [],
@@ -187,16 +183,24 @@ const SideBarIcon = ({ icon, serverPicture, onClick }) => {
                     {icon}
                 </div>
             )}
-
-            {serverPicture && (
-                <img
-                    onClick={onClick}
-                    className="flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
-                    dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
-                    src={serverPicture}
-                    alt=""
-                />
-            )}
+            {!icon &&
+                (serverPicture !== null ? (
+                    <img
+                        onClick={onClick}
+                        className="flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
+                                    dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
+                        src={serverPicture}
+                        alt=""
+                    />
+                ) : (
+                    <div
+                        onClick={onClick}
+                        className="flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
+                                    dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
+                    >
+                        <IoPrismSharp size={30} />
+                    </div>
+                ))}
         </>
     );
 };

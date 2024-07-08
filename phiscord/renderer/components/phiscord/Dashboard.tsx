@@ -46,12 +46,6 @@ import UserProfilePopup from "./UserProfilePopup";
 import TextareaAutosize from "react-textarea-autosize";
 import FriendMenu from "./FriendMenu";
 
-import {
-    IAgoraRTCRemoteUser,
-    ILocalVideoTrack,
-    IRemoteVideoTrack,
-} from "agora-rtc-sdk-ng";
-
 const fontSans = FontSans({
     subsets: ["latin"],
     variable: "--font-sans",
@@ -328,7 +322,7 @@ const DashboardNavigation = ({ setContent }) => {
                         </DialogHeader>
                     </DialogContent>
                 </Dialog>
-                <div className="flex flex-col">
+                <div className="flex flex-col w-full gap-1">
                     {loading && (
                         <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center gap-4 mt-10">
                             <AiOutlineLoading
@@ -392,7 +386,7 @@ const ConversationNavigationItem = ({
         const usersRef = firestore.collection("users");
 
         const getUserData = async () => {
-            const userDoc = await usersRef
+            const userDoc = usersRef
                 .doc(userId)
                 .onSnapshot((snapshot) => {
                     setUserData([
@@ -415,7 +409,7 @@ const ConversationNavigationItem = ({
             {userData && (
                 <div
                     className={cn(
-                        "flex min-w-72 min-h-12 items-center justify-start px-6 py-2 gap-3 dark:hover:bg-slate-800 hover:bg-slate-300",
+                        "flex w-full min-h-12 items-center justify-start px-2 py-2 gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl",
                         selected === true
                             ? "dark:bg-slate-800 bg-slate-300"
                             : ""
