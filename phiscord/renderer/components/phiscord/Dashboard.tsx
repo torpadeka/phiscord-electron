@@ -386,16 +386,14 @@ const ConversationNavigationItem = ({
         const usersRef = firestore.collection("users");
 
         const getUserData = async () => {
-            const userDoc = usersRef
-                .doc(userId)
-                .onSnapshot((snapshot) => {
-                    setUserData([
-                        snapshot.data().username,
-                        snapshot.data().tag,
-                        snapshot.data().customStatus,
-                        snapshot.data().profilePicture,
-                    ]);
-                });
+            const userDoc = usersRef.doc(userId).onSnapshot((snapshot) => {
+                setUserData([
+                    snapshot.data().username,
+                    snapshot.data().tag,
+                    snapshot.data().customStatus,
+                    snapshot.data().profilePicture,
+                ]);
+            });
         };
 
         getUserData();
@@ -422,7 +420,7 @@ const ConversationNavigationItem = ({
                 >
                     <Avatar className="bg-white">
                         <AvatarImage src={userData[3]} />
-                        <AvatarFallback>{`:(`}</AvatarFallback>
+                        <AvatarFallback>{}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col justify-center items-start">
                         <span className="font-semibold">{userData[0]}</span>
@@ -489,8 +487,6 @@ const DashboardContent = ({
         false,
         "",
     ]);
-
-    
 
     const localVideoRef = useRef(null);
     const remoteVideoRefs = useRef({});
@@ -858,7 +854,7 @@ const DashboardContent = ({
             {messages && content[0] === "conversation" && (
                 <>
                     <div
-                        className="min-h-full w-full flex flex-col items-start justify-end p-4 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar"
+                        className="min-h-min w-full flex flex-col items-start justify-end p-4 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar"
                         style={{
                             paddingBottom: `calc(${textareaHeight} + 2rem)`,
                         }}
@@ -883,7 +879,9 @@ const DashboardContent = ({
                                                             : null
                                                     }
                                                 />
-                                                <AvatarFallback>{`:(`}</AvatarFallback>
+                                                <AvatarFallback>
+                                                    {}
+                                                </AvatarFallback>
                                             </Avatar>
                                         </PopoverTrigger>
                                         <PopoverContent
@@ -897,11 +895,60 @@ const DashboardContent = ({
                                         </PopoverContent>
                                     </Popover>
                                     <div className="flex flex-col items-start justify-center">
-                                        <span className="font-bold text-black dark:text-white">
-                                            {senderData
-                                                ? senderData.username
-                                                : "Loading..."}
-                                        </span>
+                                        <div className="flex items-center justify-center gap-1">
+                                            <span className="font-bold text-black dark:text-white">
+                                                {senderData
+                                                    ? senderData.username
+                                                    : "Loading..."}
+                                            </span>
+                                            <span className="text-black dark:text-white text-[11px]">
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getMonth()
+                                                        .toString()}
+                                                /
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getDate()
+                                                        .toString()}
+                                                /
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getFullYear()
+                                                        .toString()}
+                                            </span>
+                                            <span className="text-black dark:text-white text-[11px]">
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getHours()
+                                                        .toString()}
+                                                :
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getMinutes()
+                                                        .toString()}
+                                                {message &&
+                                                message.createdAt &&
+                                                message.createdAt
+                                                    .toDate()
+                                                    .getHours() > 11 &&
+                                                message.createdAt
+                                                    .toDate()
+                                                    .getHours() < 24
+                                                    ? " PM"
+                                                    : " AM"}
+                                            </span>
+                                        </div>
                                         <ContextMenu>
                                             <ContextMenuTrigger>
                                                 {message.isFileType &&
@@ -1280,7 +1327,7 @@ const DashboardInfo = ({
 
     const [userData, setUserData] = useState(null);
     const [conversationId, setConversationId] = useState<string | null>(null);
-    
+
     useEffect(() => {
         const unsubscribe = firestore
             .collection("conversations")
@@ -1334,7 +1381,7 @@ const DashboardInfo = ({
                         <>
                             <Avatar className="bg-white w-20 h-20">
                                 <AvatarImage src={userData[2]} />
-                                <AvatarFallback>{`:(`}</AvatarFallback>
+                                <AvatarFallback>{}</AvatarFallback>
                             </Avatar>
                             <div className="flex flex-col justify-center items-center w-full">
                                 <span

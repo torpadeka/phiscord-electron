@@ -105,7 +105,7 @@ const UserProfileBox = () => {
                         <PopoverTrigger>
                             <Avatar className="bg-white">
                                 <AvatarImage src={userData[3]} />
-                                <AvatarFallback>{`:(`}</AvatarFallback>
+                                <AvatarFallback>{}</AvatarFallback>
                             </Avatar>
                         </PopoverTrigger>
                         <PopoverContent

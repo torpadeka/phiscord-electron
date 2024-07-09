@@ -15,6 +15,9 @@ import { cn } from "@/lib/utils";
 import { useAuthState } from "react-firebase-hooks/auth";
 
 import { AiOutlineLoading } from "react-icons/ai";
+import { HiSpeakerWave } from "react-icons/hi2";
+import { IoMdSettings } from "react-icons/io";
+
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import UserProfilePopup from "./UserProfilePopup";
@@ -44,7 +47,7 @@ const fontSans = FontSans({
 });
 
 const ServerDashboard = ({ serverId }) => {
-    const [serverContent, setServerContent] = useState(null);
+    const [serverContent, setServerContent] = useState([null, null]);
 
     return (
         <div className="flex w-full h-screen pl-20 pt-14">
@@ -62,6 +65,9 @@ const ServerDashboard = ({ serverId }) => {
 };
 
 const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
+    const auth = firebase.auth() as unknown as Auth;
+    const [user] = useAuthState(auth);
+
     interface ServerNavigationData {
         serverName: string;
         textChannels: Array<{
@@ -76,7 +82,8 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
         adminList: Array<string>;
     }
 
-    const [selectedTextChannel, setSelectedTextChannel] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [selectedChannel, setSelectedChannel] = useState([null, null]);
     const [serverNavigationData, setServerNavigationData] =
         useState<ServerNavigationData>(null);
 
@@ -102,6 +109,7 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                 data.adminList = admins;
 
                 setServerNavigationData({ ...data });
+                setLoading(false);
             });
 
             const unsubscribeServerTextChannels = serverRef
@@ -125,7 +133,7 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                     snapshot.forEach((voiceChannel) => {
                         voiceChannels.push({
                             voiceChannelId: voiceChannel.id,
-                            voiceChannelName: voiceChannel.data().name,
+                            voiceChannelName: voiceChannel.data().channelName,
                         });
                     });
                     data.voiceChannels = voiceChannels;
@@ -145,24 +153,42 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
             unsubscribe();
             console.log(serverNavigationData);
         };
-    }, []);
+    }, [serverId]);
 
-    return serverNavigationData ? (
-        <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-start pt-4 px-4">
-            <div className="text-black dark:text-white text-xl">
-                {serverNavigationData.serverName}
+    return !loading ? (
+        <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-start px-4">
+            <div className="flex items-center justify-between sticky top-0 text-black dark:text-white text-xl bg-slate-100 dark:bg-slate-700 w-full h-12 pt-3 border-b font-bold">
+                <span>{serverNavigationData.serverName}</span>
+                <div>
+                    {(user.uid === serverNavigationData.ownerUid ||
+                        serverNavigationData.adminList.includes(user.uid)) && (
+                        <IoMdSettings
+                            className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
+                            size={20}
+                        ></IoMdSettings>
+                    )}
+                </div>
             </div>
-            <Accordion type="single" collapsible>
-                <AccordionItem value="item-1">
+            <Accordion
+                type="multiple"
+                defaultValue={["text-channels", "voice-channels"]}
+                className="w-full"
+            >
+                <AccordionItem value="text-channels" className="border-b">
                     <div className="w-full flex items-center justify-between text-sm">
                         <AccordionTrigger className="w-60 hover:text-slate-400 dark:hover:brightness-90">
                             TEXT CHANNELS
                         </AccordionTrigger>
-                        <FaPlus
-                            size={12}
-                            onClick={() => console.log("ADD")}
-                            className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
-                        />
+                        {(user.uid === serverNavigationData.ownerUid ||
+                            serverNavigationData.adminList.includes(
+                                user.uid
+                            )) && (
+                            <FaPlus
+                                size={12}
+                                onClick={() => console.log("ADD")}
+                                className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
+                            />
+                        )}
                     </div>
                     <AccordionContent className="flex flex-col items-start justify-center gap-1 w-full">
                         {serverNavigationData.textChannels.map(
@@ -171,17 +197,21 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                                     <div
                                         key={textChannel.textChannelId}
                                         onClick={() => {
-                                            setSelectedTextChannel(
-                                                textChannel.textChannelId
-                                            );
-                                            setServerContent(
-                                                textChannel.textChannelId
-                                            );
+                                            setSelectedChannel([
+                                                "textchannel",
+                                                textChannel.textChannelId,
+                                            ]);
+                                            setServerContent([
+                                                "textchannel",
+                                                textChannel.textChannelId,
+                                            ]);
                                         }}
                                         className={cn(
                                             "flex w-full h-8 cursor-pointer items-center justify-start gap-1 px-2 rounded-xl dark:hover:bg-slate-800 hover:bg-slate-300",
-                                            selectedTextChannel ===
-                                                textChannel.textChannelId
+                                            selectedChannel[0] ===
+                                                "textchannel" &&
+                                                selectedChannel[1] ===
+                                                    textChannel.textChannelId
                                                 ? "dark:bg-slate-800 bg-slate-300"
                                                 : null
                                         )}
@@ -193,11 +223,63 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                         )}
                     </AccordionContent>
                 </AccordionItem>
+                <AccordionItem value="voice-channels">
+                    <div className="w-full flex items-center justify-between text-sm">
+                        <AccordionTrigger className="w-60 hover:text-slate-400 dark:hover:brightness-90">
+                            VOICE CHANNELS
+                        </AccordionTrigger>
+                        {(user.uid === serverNavigationData.ownerUid ||
+                            serverNavigationData.adminList.includes(
+                                user.uid
+                            )) && (
+                            <FaPlus
+                                size={12}
+                                onClick={() => console.log("ADD")}
+                                className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
+                            />
+                        )}
+                    </div>
+                    <AccordionContent className="flex flex-col items-start justify-center gap-1 w-full">
+                        {serverNavigationData.voiceChannels.map(
+                            (voiceChannel) =>
+                                voiceChannel && (
+                                    <div
+                                        key={voiceChannel.voiceChannelId}
+                                        onClick={() => {
+                                            setSelectedChannel([
+                                                "voicechannel",
+                                                voiceChannel.voiceChannelId,
+                                            ]);
+                                            setServerContent([
+                                                "voicechannel",
+                                                voiceChannel.voiceChannelId,
+                                            ]);
+                                        }}
+                                        className={cn(
+                                            "flex w-full h-8 cursor-pointer items-center justify-start gap-1 px-2 rounded-xl dark:hover:bg-slate-800 hover:bg-slate-300",
+                                            selectedChannel[0] ===
+                                                "voicechannel" &&
+                                                selectedChannel[1] ===
+                                                    voiceChannel.voiceChannelId
+                                                ? "dark:bg-slate-800 bg-slate-300"
+                                                : null
+                                        )}
+                                    >
+                                        <HiSpeakerWave size={15} />
+                                        {voiceChannel.voiceChannelName}
+                                    </div>
+                                )
+                        )}
+                    </AccordionContent>
+                </AccordionItem>
             </Accordion>
         </div>
     ) : (
-        <div className="h-full w-full flex items-center justify-center shadow-md text-white text-3xl gap-4">
-            <AiOutlineLoading className="animate-spin" size="20" />
+        <div className="h-full min-w-72 flex items-center justify-center shadow-md text-white text-3xl gap-4 bg-slate-100 dark:bg-slate-700">
+            <AiOutlineLoading
+                className="animate-spin fill-black dark:fill-white"
+                size="20"
+            />
         </div>
     );
 };
@@ -235,7 +317,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     ]);
 
     useEffect(() => {
-        if (serverContent === null) {
+        if (serverContent[0] === null) {
             setLoading(false);
             return;
         }
@@ -255,45 +337,49 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             }
         };
 
-        const unsubscribe = firestore
-            .collection("servers")
-            .doc(serverId)
-            .collection("textChannels")
-            .doc(serverContent)
-            .collection("messages")
-            .orderBy("createdAt", "asc")
-            .onSnapshot(
-                (snapshot) => {
-                    const messagesList: Message[] = snapshot.docs.map(
-                        (messageDoc) => {
-                            const messageData = messageDoc.data();
-                            getUserData(messageData.senderUid);
-                            return {
-                                senderUid: messageData.senderUid,
-                                isFileType: messageData.isFileType,
-                                isImageType: messageData.isImageType,
-                                isVideoType: messageData.isVideoType,
-                                fileName: messageData.fileName,
-                                text: messageData.text,
-                                createdAt: messageData.createdAt,
-                                file: messageData.file,
-                                messageId: messageDoc.id,
-                                edited: messageData.edited,
-                            };
-                        }
-                    );
-                    setMessages(messagesList);
-                    setLoading(false);
-                    console.log("Messages loaded:", messagesList);
-                },
-                (error) => {
-                    console.error("Error fetching messages:", error);
-                    setLoading(false);
-                }
-            );
+        if (serverContent[0] === "textchannel") {
+            const unsubscribe = firestore
+                .collection("servers")
+                .doc(serverId)
+                .collection("textChannels")
+                .doc(serverContent[1])
+                .collection("messages")
+                .orderBy("createdAt", "asc")
+                .onSnapshot(
+                    (snapshot) => {
+                        const messagesList: Message[] = snapshot.docs.map(
+                            (messageDoc) => {
+                                const messageData = messageDoc.data();
+                                getUserData(messageData.senderUid);
+                                return {
+                                    senderUid: messageData.senderUid,
+                                    isFileType: messageData.isFileType,
+                                    isImageType: messageData.isImageType,
+                                    isVideoType: messageData.isVideoType,
+                                    fileName: messageData.fileName,
+                                    text: messageData.text,
+                                    createdAt: messageData.createdAt,
+                                    file: messageData.file,
+                                    messageId: messageDoc.id,
+                                    edited: messageData.edited,
+                                };
+                            }
+                        );
+                        setMessages(messagesList);
+                        setLoading(false);
+                        console.log("Messages loaded:", messagesList);
+                    },
+                    (error) => {
+                        console.error("Error fetching messages:", error);
+                        setLoading(false);
+                    }
+                );
 
-        return () => unsubscribe();
-    }, [serverContent]);
+            return () => unsubscribe();
+        } else if (serverContent[1] === "voicechannel") {
+            // Get Voice Channel data here
+        }
+    }, [serverContent, serverId]);
 
     const scrollToBottom = () => {
         messagesRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -304,7 +390,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             const file = e.target.files[0];
             const storageRef = storage.ref();
             const fileRef = storageRef.child(
-                `messages/${serverId}/${serverContent}/${file.name}`
+                `messages/servers/${serverId}/${serverContent[1]}/${file.name}`
             );
 
             const isImage = file.type.startsWith("image/");
@@ -330,7 +416,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 .collection("servers")
                 .doc(serverId)
                 .collection("textChannels")
-                .doc(serverContent)
+                .doc(serverContent[1])
                 .collection("messages")
                 .add(newMessage);
 
@@ -359,7 +445,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 .collection("servers")
                 .doc(serverId)
                 .collection("textChannels")
-                .doc(serverContent)
+                .doc(serverContent[1])
                 .collection("messages")
                 .add(newMessage);
 
@@ -397,7 +483,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 .collection("servers")
                 .doc(serverId)
                 .collection("textChannels")
-                .doc(serverContent)
+                .doc(serverContent[1])
                 .collection("messages")
                 .doc(editingMessage[1])
                 .update({
@@ -418,7 +504,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             .collection("servers")
             .doc(serverId)
             .collection("textChannels")
-            .doc(serverContent)
+            .doc(serverContent[1])
             .collection("messages")
             .doc(deletingMessage[1])
             .get();
@@ -430,7 +516,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             .collection("servers")
             .doc(serverId)
             .collection("textChannels")
-            .doc(serverContent)
+            .doc(serverContent[1])
             .collection("messages")
             .doc(deletingMessage[1])
             .delete();
@@ -469,7 +555,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
 
     return (
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
-            {serverContent !== null && messages && (
+            {serverContent[0] === "textchannel" && messages && (
                 <>
                     <div
                         className="min-h-full w-full flex flex-col items-start justify-end p-4 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar"
@@ -511,11 +597,61 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                         </PopoverContent>
                                     </Popover>
                                     <div className="flex flex-col items-start justify-center">
-                                        <span className="font-bold text-black dark:text-white">
-                                            {senderData
-                                                ? senderData.username
-                                                : "Loading..."}
-                                        </span>
+                                        <div className="flex items-center justify-center gap-1">
+                                            <span className="font-bold text-black dark:text-white">
+                                                {senderData
+                                                    ? senderData.username
+                                                    : "Loading..."}
+                                            </span>
+                                            <span className="text-black dark:text-white text-[11px]">
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getMonth()
+                                                        .toString()}
+                                                /
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getDate()
+                                                        .toString()}
+                                                /
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getFullYear()
+                                                        .toString()}
+                                            </span>
+                                            <span className="text-black dark:text-white text-[11px]">
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getHours()
+                                                        .toString()}
+                                                :
+                                                {message &&
+                                                    message.createdAt &&
+                                                    message.createdAt
+                                                        .toDate()
+                                                        .getMinutes()
+                                                        .toString()}
+                                                {message &&
+                                                message.createdAt &&
+                                                message.createdAt
+                                                    .toDate()
+                                                    .getHours() > 11 &&
+                                                message.createdAt
+                                                    .toDate()
+                                                    .getHours() < 24
+                                                    ? " PM"
+                                                    : " AM"}
+                                            </span>
+                                        </div>
+
                                         <ContextMenu>
                                             <ContextMenuTrigger>
                                                 {message.isFileType &&
