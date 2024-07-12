@@ -147,7 +147,7 @@ const HomePage = () => {
                     />
                 )}
                 {activePage[0] === "server" && (
-                    <ServerDashboard serverId={activePage[1]} />
+                    <ServerDashboard setActivePage={setActivePage} serverId={activePage[1]} />
                 )}
                 <UserProfileBox />
             </div>

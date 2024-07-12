@@ -113,13 +113,13 @@ const TopBar = () => {
                                         </TabsTrigger>
                                     </TabsList>
                                     <TabsContent
-                                        className="fade-in-faster h-96 w-full overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar"
+                                        className="fade-in-faster h-96 w-full overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar px-2"
                                         value="general"
                                     >
                                         <GeneralSettings></GeneralSettings>
                                     </TabsContent>
                                     <TabsContent
-                                        className="fade-in-faster h-96 w-full overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar"
+                                        className="fade-in-faster h-96 w-full overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar px-2"
                                         value="privacy"
                                     ></TabsContent>
                                 </Tabs>

@@ -72,12 +72,12 @@ const GeneralSettings = () => {
                     <Label className="text-black dark:text-white text-xl">
                         Set Profile Picture
                     </Label>
-
                     <Input
                         className="flex w-56 h-10 justify-center items-center gap-2 rounded-3xl bg-slate-300 dark:bg-slate-600
                                         hover:scale-105 hover:brightness-125 transition-all shadow-md cursor-pointer"
                         onChange={handleFileChange}
                         type="file"
+                        accept="image/*"
                     ></Input>
                     <Button
                         className="w-44 bg-slate-900 text-white hover:text-black hover:bg-white dark:hover:bg-slate-200 rounded-3xl cursor-pointer shadow-md"

@@ -31,7 +31,7 @@ const UserProfilePopup = ({ serverId, userUid }) => {
     }, []);
 
     return (
-        <div className="min-w-40 h-56 bg-slate-300 dark:bg-slate-900 flex flex-col items-center justify-start pt-2 gap-4">
+        <div className="min-w-40 min-h-60 bg-slate-300 dark:bg-slate-900 flex flex-col items-center justify-start py-2 gap-4">
             {userData && (
                 <>
                     <Avatar className="bg-white w-20 h-20">
@@ -41,7 +41,7 @@ const UserProfilePopup = ({ serverId, userUid }) => {
                     <div className="flex flex-col justify-center items-center w-full">
                         <span
                             className={cn(
-                                "dark:text-white text-2xl font-sans font-semibold antialiased",
+                                "dark:text-white text-2xl font-sans font-semibold antialiased max-w-48 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar",
                                 fontSans.variable
                             )}
                         >
@@ -58,7 +58,7 @@ const UserProfilePopup = ({ serverId, userUid }) => {
                     </div>
                     <span
                         className={cn(
-                            "dark:text-white text-sm font-sans antialiased",
+                            "dark:text-white text-sm font-sans antialiased text-center",
                             fontSans.variable
                         )}
                     >

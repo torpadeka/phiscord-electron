@@ -105,6 +105,11 @@ const DashboardNavigation = ({ setContent }) => {
     const [toastMessage, setToastMessage] = useState("");
     const { toast } = useToast();
 
+    useEffect(() => {
+        setNewChatError("");
+        setNewChatInput("");
+    }, [isCreatingNewChat]);
+
     const closeFriendMenu = () => {
         setIsFriendMenuOpen(false);
     };
@@ -337,7 +342,7 @@ const DashboardNavigation = ({ setContent }) => {
                             <ConversationNavigationItem
                                 key={id}
                                 setContent={setContent}
-                                userId={id}
+                                userUid={id}
                                 selected={selectedConversation === id}
                                 setSelected={setSelectedConversation}
                             ></ConversationNavigationItem>
@@ -350,7 +355,7 @@ const DashboardNavigation = ({ setContent }) => {
 
 const ConversationNavigationItem = ({
     setContent,
-    userId,
+    userUid,
     selected,
     setSelected,
 }) => {
@@ -360,7 +365,7 @@ const ConversationNavigationItem = ({
     useEffect(() => {
         const getUserRealTimeStatus = async () => {
             const userStatusDatabaseRef = database.ref(
-                `userState/${userId}/status`
+                `userState/${userUid}/status`
             );
 
             const handleStatusUpdate = (snapshot) => {
@@ -386,7 +391,7 @@ const ConversationNavigationItem = ({
         const usersRef = firestore.collection("users");
 
         const getUserData = async () => {
-            const userDoc = usersRef.doc(userId).onSnapshot((snapshot) => {
+            const unsubscribeUserDoc = usersRef.doc(userUid).onSnapshot((snapshot) => {
                 setUserData([
                     snapshot.data().username,
                     snapshot.data().tag,
@@ -414,8 +419,8 @@ const ConversationNavigationItem = ({
                     )}
                     onClick={() => {
                         console.log("CONVO CLICKED");
-                        setSelected(userId);
-                        setContent(["conversation", userId]);
+                        setSelected(userUid);
+                        setContent(["conversation", userUid]);
                     }}
                 >
                     <Avatar className="bg-white">
@@ -423,8 +428,10 @@ const ConversationNavigationItem = ({
                         <AvatarFallback>{}</AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col justify-center items-start">
-                        <span className="font-semibold">{userData[0]}</span>
-                        <span className="text-sm text-slate-600 dark:text-slate-400">
+                        <span className="font-semibold max-w-44 overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
+                            {userData[0]}
+                        </span>
+                        <span className="text-sm text-slate-600 dark:text-slate-400 max-w-44 whitespace-nowrap overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
                             {userRealtimeStatus === "Offline"
                                 ? userRealtimeStatus
                                 : userData[2] || userRealtimeStatus}
@@ -904,10 +911,11 @@ const DashboardContent = ({
                                             <span className="text-black dark:text-white text-[11px]">
                                                 {message &&
                                                     message.createdAt &&
-                                                    message.createdAt
-                                                        .toDate()
-                                                        .getMonth()
-                                                        .toString()}
+                                                    (
+                                                        message.createdAt
+                                                            .toDate()
+                                                            .getMonth() + 1
+                                                    ).toString()}
                                                 /
                                                 {message &&
                                                     message.createdAt &&
@@ -933,10 +941,14 @@ const DashboardContent = ({
                                                 :
                                                 {message &&
                                                     message.createdAt &&
-                                                    message.createdAt
+                                                    (message.createdAt
                                                         .toDate()
                                                         .getMinutes()
-                                                        .toString()}
+                                                         < 10 ? 0 + message.createdAt
+                                                         .toDate()
+                                                         .getMinutes().toString() : message.createdAt
+                                                         .toDate()
+                                                         .getMinutes().toString())}
                                                 {message &&
                                                 message.createdAt &&
                                                 message.createdAt
@@ -1386,7 +1398,7 @@ const DashboardInfo = ({
                             <div className="flex flex-col justify-center items-center w-full">
                                 <span
                                     className={cn(
-                                        "dark:text-white text-2xl font-sans font-semibold antialiased",
+                                        "dark:text-white text-2xl font-sans font-semibold antialiased max-w-60 overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar",
                                         fontSans.variable
                                     )}
                                 >
@@ -1403,7 +1415,7 @@ const DashboardInfo = ({
                             </div>
                             <span
                                 className={cn(
-                                    "dark:text-white text-sm font-sans antialiased",
+                                    "dark:text-white text-sm font-sans antialiased text-center max-w-64",
                                     fontSans.variable
                                 )}
                             >

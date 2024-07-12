@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Inter as FontSans } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
-import { AiOutlineLoading } from "react-icons/ai";
 import { BiDotsVerticalRounded } from "react-icons/bi";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import {
@@ -781,6 +780,38 @@ const UserItem = ({
         setToastMessage(cn("Removed the block on ", userData[0]));
     };
 
+    const handleChatFriend = async () => {
+        const checkExistingConversation = await firestore
+            .collection("conversations")
+            .where("userIds", "array-contains", user.uid)
+            .get();
+
+        let conversationExists = false;
+        checkExistingConversation.forEach((conversationDoc) => {
+            if (conversationDoc.data().userIds.includes(userUid)) {
+                conversationExists = true;
+            }
+        });
+
+        if (conversationExists) {
+            setToastMessage(
+                "Conversation already exists! Redirecting now . . ."
+            );
+            setContent(["conversation", userUid]);
+            return;
+        }
+
+        await firestore.collection("conversations").add({
+            userIds: [user.uid, userUid],
+            lastChanged: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        setContent(["conversation", userUid]);
+        setToastMessage("New chat created successfully!");
+        closeFriendMenu();
+        setSelectedConversation(userUid);
+    };
+
     if (onlyOnline) {
         return (
             <>
@@ -826,16 +857,7 @@ const UserItem = ({
                                     {actionType === "friend" && (
                                         <div className="w-full flex flex-col items-start justify-center">
                                             <span
-                                                onClick={() => {
-                                                    setContent([
-                                                        "conversation",
-                                                        userUid,
-                                                    ]);
-                                                    closeFriendMenu();
-                                                    setSelectedConversation(
-                                                        userUid
-                                                    );
-                                                }}
+                                                onClick={handleChatFriend}
                                                 className={cn(
                                                     "w-full p-1 dark:text-white font-bold text-sm font-sans antialiased cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm",
                                                     fontSans.variable

@@ -284,9 +284,13 @@ const SideBarIcon = ({ icon, serverPicture, onClick }) => {
             {icon && (
                 <div
                     onClick={onClick}
-                    className="flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
+                    className="relative flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
             dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
                 >
+                    {/* <span className="absolute top-0 right-0 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+                    </span> */}
                     {icon}
                 </div>
             )}
