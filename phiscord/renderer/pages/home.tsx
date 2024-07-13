@@ -29,7 +29,6 @@ const HomePage = () => {
     });
     const [start, setStart] = useState(false);
 
-    // Function for components to initiate leaving the current call
     const leaveCall = async () => {
         if (typeof window !== "undefined") {
             const { client } = await import("../agora/agoraConfig");
@@ -43,25 +42,53 @@ const HomePage = () => {
         }
     };
 
+    const muteAudio = () => {
+        if (localTracks.microphoneTrack) {
+            localTracks.microphoneTrack.setMuted(true);
+        }
+    };
+
+    const unmuteAudio = () => {
+        if (localTracks.microphoneTrack) {
+            localTracks.microphoneTrack.setMuted(false);
+        }
+    };
+
+    const muteVideo = () => {
+        if (localTracks.cameraTrack) {
+            localTracks.cameraTrack.setMuted(true);
+        }
+    };
+
+    const unmuteVideo = () => {
+        if (localTracks.cameraTrack) {
+            localTracks.cameraTrack.setMuted(false);
+        }
+    };
+
+    const deafenAudio = (users) => {
+        users.forEach((user) => {
+            if (user.audioTrack) {
+                user.audioTrack.setEnabled(false); // Mute the remote audio track
+            }
+        });
+    };
+    
+    // Function to Unmute Remote Audio Tracks
+    const undeafenAudio = (users) => {
+        users.forEach((user) => {
+            if (user.audioTrack) {
+                user.audioTrack.setEnabled(true); // Unmute the remote audio track
+            }
+        });
+    };
+
     useEffect(() => {
         if (typeof window !== "undefined") {
             const initAgora = async () => {
                 const { client, fetchToken, createTracks } = await import(
                     "../agora/agoraConfig"
                 );
-
-                const leaveCall = async () => {
-                    await client.leave();
-                    localTracks.microphoneTrack?.close();
-                    localTracks.cameraTrack?.close();
-                    setLocalTracks({
-                        microphoneTrack: null,
-                        cameraTrack: null,
-                    });
-                    setUsers([]);
-                    setStart(false);
-                    setInCall(false);
-                };
 
                 const handleUserPublished = async (user, mediaType) => {
                     await client.subscribe(user, mediaType);
@@ -133,7 +160,7 @@ const HomePage = () => {
     return (
         <div className="fade-in">
             <TopBar />
-            <SideBar setActivePage={setActivePage} />
+            <SideBar activePage={activePage} setActivePage={setActivePage} />
             <div className="content">
                 {activePage[0] === "dashboard" && (
                     <Dashboard
@@ -144,6 +171,12 @@ const HomePage = () => {
                         users={users}
                         localTracks={localTracks}
                         leaveCall={leaveCall}
+                        muteAudio={muteAudio}
+                        unmuteAudio={unmuteAudio}
+                        muteVideo={muteVideo}
+                        unmuteVideo={unmuteVideo}
+                        deafenAudio={deafenAudio}
+                        undeafenAudio={undeafenAudio}
                     />
                 )}
                 {activePage[0] === "server" && (

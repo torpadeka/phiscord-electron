@@ -59,6 +59,12 @@ const Dashboard = ({
     users,
     localTracks,
     leaveCall,
+    unmuteVideo,
+    muteVideo,
+    muteAudio,
+    unmuteAudio,
+    deafenAudio,
+    undeafenAudio,
 }) => {
     const [content, setContent] = useState(["welcome", null]);
 
@@ -75,6 +81,10 @@ const Dashboard = ({
                     users={users}
                     localTracks={localTracks}
                     leaveCall={leaveCall}
+                    unmuteVideo={unmuteVideo}
+                    muteVideo={muteVideo}
+                    muteAudio={muteAudio}
+                    unmuteAudio={unmuteAudio}
                 />
                 <DashboardInfo
                     content={content}
@@ -391,14 +401,16 @@ const ConversationNavigationItem = ({
         const usersRef = firestore.collection("users");
 
         const getUserData = async () => {
-            const unsubscribeUserDoc = usersRef.doc(userUid).onSnapshot((snapshot) => {
-                setUserData([
-                    snapshot.data().username,
-                    snapshot.data().tag,
-                    snapshot.data().customStatus,
-                    snapshot.data().profilePicture,
-                ]);
-            });
+            const unsubscribeUserDoc = usersRef
+                .doc(userUid)
+                .onSnapshot((snapshot) => {
+                    setUserData([
+                        snapshot.data().username,
+                        snapshot.data().tag,
+                        snapshot.data().customStatus,
+                        snapshot.data().profilePicture,
+                    ]);
+                });
         };
 
         getUserData();
@@ -460,6 +472,10 @@ const DashboardContent = ({
     users,
     localTracks,
     leaveCall,
+    unmuteVideo,
+    muteVideo,
+    muteAudio,
+    unmuteAudio,
 }) => {
     interface Message {
         senderUid: string;
@@ -495,6 +511,9 @@ const DashboardContent = ({
         "",
     ]);
 
+    const Filter = require("bad-words")
+    const filter = new Filter();
+
     const localVideoRef = useRef(null);
     const remoteVideoRefs = useRef({});
 
@@ -507,8 +526,10 @@ const DashboardContent = ({
     }, [localTracks.cameraTrack, conversationId]);
 
     useEffect(() => {
+        console.log("Users array:", users);
         users.forEach((user) => {
             if (user.videoTrack && remoteVideoRefs.current[user.uid]) {
+                console.log("Playing remote video for user:", user.uid);
                 user.videoTrack.play(remoteVideoRefs.current[user.uid]);
             }
         });
@@ -831,19 +852,36 @@ const DashboardContent = ({
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
             {inCall && channelName === conversationId && (
                 <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-400 flex justify-center items-center">
-                    <div className="local-video w-min h-min rounded-xl border-slate-300 border-4">
-                        <div ref={localVideoRef} className="video-player"></div>
+                    <div className="local-video relative w-96 h-[188px] rounded-2xl border-slate-300 border-4">
+                        <div
+                            ref={localVideoRef}
+                            className="video-player z-50 rounded-xl"
+                        ></div>
+                        <div className="w-full h-full absolute bg-slate-100 top-0 rounded-xl"></div>
                     </div>
                     <div className="remote-videos">
                         {users.map((user) => (
                             <div
                                 key={user.uid}
-                                ref={(el) => {
-                                    remoteVideoRefs.current[user.uid] = el;
-                                }}
-                                className="video-player"
-                            ></div>
+                                className="relative w-64 h-[148px] rounded-2xl border-slate-300 border-4"
+                            >
+                                <div
+                                    ref={(el) => {
+                                        remoteVideoRefs.current[user.uid] = el;
+                                    }}
+                                    className="video-player"
+                                ></div>
+                                {!user.videoTrack && (
+                                    <div className="w-full h-full absolute bg-slate-100 top-0 rounded-xl"></div>
+                                )}
+                            </div>
                         ))}
+                    </div>
+                    <div className="flex flex-col items-center justify-center w-full">
+                        <Button onClick={unmuteVideo}>Camera On</Button>
+                        <Button onClick={muteVideo}>Camera Off</Button>
+                        <Button onClick={muteAudio}>Mic Off</Button>
+                        <Button onClick={unmuteAudio}>Mic On</Button>
                     </div>
                 </div>
             )}
@@ -861,7 +899,7 @@ const DashboardContent = ({
             {messages && content[0] === "conversation" && (
                 <>
                     <div
-                        className="min-h-min w-full flex flex-col items-start justify-end p-4 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar"
+                        className="relative min-h-full w-full flex flex-col items-start justify-end p-4 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar"
                         style={{
                             paddingBottom: `calc(${textareaHeight} + 2rem)`,
                         }}
@@ -943,12 +981,16 @@ const DashboardContent = ({
                                                     message.createdAt &&
                                                     (message.createdAt
                                                         .toDate()
-                                                        .getMinutes()
-                                                         < 10 ? 0 + message.createdAt
-                                                         .toDate()
-                                                         .getMinutes().toString() : message.createdAt
-                                                         .toDate()
-                                                         .getMinutes().toString())}
+                                                        .getMinutes() < 10
+                                                        ? 0 +
+                                                          message.createdAt
+                                                              .toDate()
+                                                              .getMinutes()
+                                                              .toString()
+                                                        : message.createdAt
+                                                              .toDate()
+                                                              .getMinutes()
+                                                              .toString())}
                                                 {message &&
                                                 message.createdAt &&
                                                 message.createdAt
@@ -1032,7 +1074,7 @@ const DashboardContent = ({
                                                             </div>
                                                         </div>
                                                     )}
-                                                <span>{message.text}</span>
+                                                <span>{filter.clean(message.text)}</span>
                                                 {message.edited && (
                                                     <div className="text-[10px]">
                                                         (edited)

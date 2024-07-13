@@ -22,6 +22,7 @@ import { Button } from "../ui/button";
 import { Label } from "../ui/label";
 import { IoPrismSharp } from "react-icons/io5";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+import { RiRectangleFill } from "react-icons/ri";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -33,7 +34,7 @@ interface ServerShortDetail {
     serverId: string;
 }
 
-const SideBar = ({ setActivePage }) => {
+const SideBar = ({ activePage, setActivePage }) => {
     const auth = firebase.auth() as unknown as Auth;
     const [user, loading, error] = useAuthState(auth);
     const [servers, setServers] = useState<ServerShortDetail[]>([]);
@@ -252,6 +253,7 @@ const SideBar = ({ setActivePage }) => {
                         dark:bg-slate-900 bg-slate-200 dark:text-white overflow-scroll no-scrollbar::-webkit-scrollbar no-scrollbar"
             >
                 <SideBarIcon
+                    selected={activePage[0] === "dashboard"}
                     icon={<LuBox size={30} />}
                     serverPicture={null}
                     onClick={() => setActivePage(["dashboard", null])}
@@ -259,6 +261,10 @@ const SideBar = ({ setActivePage }) => {
                 {servers.map((server, index) => {
                     return (
                         <SideBarIcon
+                            selected={
+                                activePage[0] === "server" &&
+                                activePage[1] === server.serverId
+                            }
                             key={index}
                             icon={null}
                             serverPicture={server.serverPicture}
@@ -269,6 +275,7 @@ const SideBar = ({ setActivePage }) => {
                     );
                 })}
                 <SideBarIcon
+                    selected={false}
                     icon={<FaPlus size={30} />}
                     serverPicture={null}
                     onClick={() => setIsAddingNewServer(true)}
@@ -278,31 +285,45 @@ const SideBar = ({ setActivePage }) => {
     );
 };
 
-const SideBarIcon = ({ icon, serverPicture, onClick }) => {
+const SideBarIcon = ({ selected, icon, serverPicture, onClick }) => {
     return (
         <>
             {icon && (
                 <div
                     onClick={onClick}
                     className="relative flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
-            dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
+                                    dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
                 >
                     {/* <span className="absolute top-0 right-0 flex h-3 w-3">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
                     </span> */}
                     {icon}
+                    {selected && (
+                        <RiRectangleFill
+                            className="fixed -left-[58px] dark:fill-white fill-slate-400"
+                            size={70}
+                        />
+                    )}
                 </div>
             )}
             {!icon &&
                 (serverPicture !== null ? (
-                    <img
-                        onClick={onClick}
-                        className="flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-500 rounded-3xl hover:rounded-xl
+                    <div className="relative">
+                        <img
+                            onClick={onClick}
+                            className="flex items-center justify-center min-h-14 w-14 my-2 shadow-lg bg-white dark:bg-slate-400 rounded-3xl hover:rounded-xl
                                     dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
-                        src={serverPicture}
-                        alt=""
-                    />
+                            src={serverPicture}
+                            alt=""
+                        />
+                        {selected && (
+                            <RiRectangleFill
+                                className="absolute -left-[70px] bottom-0 z-50 dark:fill-white fill-slate-400"
+                                size={70}
+                            />
+                        )}
+                    </div>
                 ) : (
                     <div
                         onClick={onClick}
@@ -310,6 +331,12 @@ const SideBarIcon = ({ icon, serverPicture, onClick }) => {
                                     dark:hover:bg-slate-500 transition-all ease-in-out cursor-pointer"
                     >
                         <IoPrismSharp size={30} />
+                        {selected && (
+                            <RiRectangleFill
+                                className="fixed -left-[58px] dark:fill-white fill-slate-400"
+                                size={70}
+                            />
+                        )}
                     </div>
                 ))}
         </>

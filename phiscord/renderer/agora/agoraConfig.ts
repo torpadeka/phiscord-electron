@@ -11,14 +11,14 @@ const fetchToken = async (channelName: string): Promise<string> => {
 };
 
 const createTracks = async () => {
-    const [microphoneTrack, cameraTrack] =
-        await AgoraRTC.createMicrophoneAndCameraTracks(
-            {},
-            {
-                encoderConfig: "1080p_1", // Use desired video profile, e.g., "1080p_1" for 1080p resolution
-            }
-        );
+    const [microphoneTrack, cameraTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+        {},
+        { encoderConfig: "1080p_1" }
+    );
+    cameraTrack.setMuted(true);
+
     return { microphoneTrack, cameraTrack };
 };
+
 
 export { client, fetchToken, createTracks };

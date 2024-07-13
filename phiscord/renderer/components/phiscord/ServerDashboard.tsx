@@ -127,6 +127,7 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
     const [addingTextChannel, setAddingTextChannel] = useState(false);
     const [addingVoiceChannel, setAddingVoiceChannel] = useState(false);
     const [addNewTextChannelError, setAddNewTextChannelError] = useState("");
+    const [addNewVoiceChannelError, setAddNewVoiceChannelError] = useState("");
     const [newTextChannelInput, setNewTextChannelInput] = useState("");
     const [newVoiceChannelInput, setNewVoiceChannelInput] = useState("");
 
@@ -376,13 +377,76 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
         setToastMessage("Kicked user successfully!");
     };
 
-    const handleNewTextChannelInputChange = async () => {};
+    const handleNewTextChannelInputChange = (e) => {
+        setNewTextChannelInput(e.target.value);
+    };
 
-    const handleCreateNewTextChannel = async () => {};
+    const handleCreateNewTextChannel = async () => {
+        if (newTextChannelInput === "") {
+            setAddNewTextChannelError("Channel name can't be empty!");
+            return;
+        }
 
-    const handleNewVoiceChannelInputChange = async () => {};
+        if (newTextChannelInput.includes(" ")) {
+            setAddNewTextChannelError(
+                "Text channel names can't contain spaces!"
+            );
+            return;
+        }
 
-    const handleCreateNewVoiceChannel = async () => {};
+        const alphanumericRegex = /^[a-z0-9-]+$/i;
+        if (!alphanumericRegex.test(newTextChannelInput)) {
+            setAddNewTextChannelError(
+                "Text channel names can only contain alphabets, numbers and dashes!"
+            );
+            return;
+        }
+
+        await firestore
+            .collection("servers")
+            .doc(serverId)
+            .collection("textChannels")
+            .add({
+                channelName: newTextChannelInput.toLowerCase(),
+            });
+
+        setNewTextChannelInput("");
+        setAddingTextChannel(false);
+        setAddNewTextChannelError("");
+        setToastMessage("Successfully created new text channel!");
+    };
+
+    const handleNewVoiceChannelInputChange = (e) => {
+        setNewVoiceChannelInput(e.target.value);
+    };
+
+    const handleCreateNewVoiceChannel = async () => {
+        if (newVoiceChannelInput === "") {
+            setAddNewVoiceChannelError("Channel name can't be empty!");
+            return;
+        }
+
+        const alphanumericRegex = /^[a-z0-9-]+$/i;
+        if (!alphanumericRegex.test(newVoiceChannelInput)) {
+            setAddNewVoiceChannelError(
+                "Voice channel names can only contain alphabets, numbers, spaces and dashes!"
+            );
+            return;
+        }
+
+        await firestore
+            .collection("servers")
+            .doc(serverId)
+            .collection("voiceChannels")
+            .add({
+                channelName: newVoiceChannelInput,
+            });
+
+        setNewVoiceChannelInput("");
+        setAddingVoiceChannel(false);
+        setAddNewVoiceChannelError("");
+        setToastMessage("Successfully created new voice channel!");
+    };
 
     return !loading ? (
         <>
@@ -417,7 +481,7 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                                 ></Input>
                                 <Label
                                     className={cn(
-                                        "text-red-500 text-sm font-sans antialiased mt-1",
+                                        "text-red-500 text-sm font-sans antialiased mt-1 text-center w-3/4",
                                         fontSans.variable
                                     )}
                                 >
@@ -428,6 +492,53 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                                     className="mt-1 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
                                 >
                                     Add Text Channel
+                                </Button>
+                            </div>
+                        </DialogDescription>
+                    </DialogHeader>
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={addingVoiceChannel}
+                onOpenChange={setAddingVoiceChannel}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            Add a Voice Channel
+                        </DialogTitle>
+                        <DialogDescription
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            <div className="flex flex-col items-center justify-center gap-3 pt-4">
+                                <Label>Enter Voice Channel Name</Label>
+                                <Input
+                                    type="text"
+                                    placeholder="epic-channel"
+                                    onChange={handleNewVoiceChannelInputChange}
+                                    className="w-full bg-slate-300 dark:bg-slate-700 rounded-2xl mt-4 p-4"
+                                ></Input>
+                                <Label
+                                    className={cn(
+                                        "text-red-500 text-sm font-sans antialiased mt-1 text-center w-3/4",
+                                        fontSans.variable
+                                    )}
+                                >
+                                    {addNewVoiceChannelError}
+                                </Label>
+                                <Button
+                                    onClick={handleCreateNewVoiceChannel}
+                                    className="mt-1 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
+                                >
+                                    Add Voice Channel
                                 </Button>
                             </div>
                         </DialogDescription>
@@ -1094,11 +1205,11 @@ const UserInfo = ({ isOwner, isAdmin, userUid, serverId }) => {
             });
 
             const nicknameDoc = await firestore
-                        .collection("users")
-                        .doc(userUid)
-                        .collection("nicknames")
-                        .doc(serverId)
-                        .get();
+                .collection("users")
+                .doc(userUid)
+                .collection("nicknames")
+                .doc(serverId)
+                .get();
 
             let nickname;
 
@@ -1219,6 +1330,9 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     const [mentionOpen, setMentionOpen] = useState(false);
     const [currentMentionIndex, setCurrentMentionIndex] = useState(null);
     const [mentionedUids, setMentionedUids] = useState([]);
+
+    const Filter = require("bad-words");
+    const filter = new Filter();
 
     useEffect(() => {
         setMentionOpen(false);
@@ -1482,23 +1596,23 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         const mentions = [];
         const verifiedMentions = [];
         let match;
-    
+
         while ((match = mentionRegex.exec(text)) !== null) {
             const mentionText = match[1];
             let user;
-    
+
             // Check if the mention matches any user's nickname first
             user = Object.values(userData).find(
                 (user) => user.nickname === mentionText
             );
-    
+
             // If no nickname matches, check the username
             if (!user) {
                 user = Object.values(userData).find(
                     (user) => !user.nickname && user.username === mentionText
                 );
             }
-    
+
             if (user) {
                 mentions.push({ mentionText, uid: user.uid });
                 verifiedMentions.push(user.uid);
@@ -1506,7 +1620,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 console.error(`Invalid mention: @${mentionText}`);
             }
         }
-    
+
         // Add manually typed mentions that match the userData
         mentionedUids.forEach((uid) => {
             const user = userData[uid];
@@ -1518,7 +1632,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 }
             }
         });
-    
+
         return verifiedMentions;
     };
 
@@ -1614,24 +1728,87 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
 
     const renderMessageWithMentions = (message) => {
         const mentionRegex = /@(\w+)/g;
-        const parts = message.text.split(mentionRegex);
         const validMentions = message.mentions; // List of valid mentioned UIDs from the message
-        
-        return parts.map((part, index) => {
-            // Check if part matches any username or nickname corresponding to a valid mention UID
-            const isValidMention = validMentions.some(uid => {
-                const user = userData[uid];
-                return user && (user.nickname === part || user.username === part);
+
+        let lastIndex = 0;
+        const parts = [];
+
+        message.text.replace(mentionRegex, (match, p1, offset) => {
+            // Add text before the mention
+            if (lastIndex < offset) {
+                parts.push({
+                    text: message.text.slice(lastIndex, offset),
+                    isMention: false,
+                });
+            }
+
+            // Add the mention
+            parts.push({
+                text: p1,
+                isMention: true,
             });
-    
-            if (mentionRegex.test(`@${part}`)) {
+
+            lastIndex = offset + match.length;
+        });
+
+        // Add remaining text after the last mention
+        if (lastIndex < message.text.length) {
+            parts.push({
+                text: message.text.slice(lastIndex),
+                isMention: false,
+            });
+        }
+
+        console.log("Parts:", parts);
+
+        return parts.map((part, index) => {
+            if (part.isMention) {
+                const isValidMention = validMentions.some((uid) => {
+                    const user = userData[uid];
+                    return (
+                        user &&
+                        (user.nickname === part.text ||
+                            user.username === part.text)
+                    );
+                });
+
+                console.log(`Mention: ${part.text}, Valid: ${isValidMention}`);
+
                 if (isValidMention) {
-                    return <span key={index} className="shadow-md px-2 rounded-xl bg-indigo-500 font-bold text-white">@{part}</span>;
+                    return (
+                        <Popover>
+                            <PopoverTrigger>
+                                <span
+                                    key={index}
+                                    className="shadow-md px-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 cursor-pointer font-bold text-white"
+                                >
+                                    @{part.text}
+                                </span>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                sideOffset={10}
+                                className="w-min h-min bg-slate-300 dark:bg-slate-900 border-slate-500"
+                            >
+                                <UserProfilePopup
+                                    serverId={null}
+                                    userUid={message.senderUid}
+                                ></UserProfilePopup>
+                            </PopoverContent>
+                        </Popover>
+                    );
                 } else {
-                    return <span key={index}>@{part}</span>;
+                    return <span key={index}>@{part.text}</span>;
                 }
             } else {
-                return <span key={index}>{part}</span>;
+                // Ensure part.text is a string
+                const textToClean = part.text ?? "";
+                console.log("Text to clean:", textToClean);
+                try {
+                    return <span key={index}>{filter.clean(textToClean)}</span>;
+                } catch (error) {
+                    console.error("Error cleaning text:", textToClean, error);
+                    return <span key={index}>{textToClean}</span>;
+                }
             }
         });
     };
@@ -1639,31 +1816,38 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     return (
         <div className="relative h-full w-full bg-slate-200 dark:bg-slate-900 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar">
             {mentionOpen && (
-                <div className="rounded-xl shadow-md fixed left-[490px] bottom-16 flex flex-col items-start justify-center bg-slate-100 w-min max-h-96 z-20 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar">
-                    {serverContentData?.memberList?.map((uid) => {
-                        const user = userData[uid];
-                        return (
-                            user && (
-                                <div
-                                    key={uid}
-                                    className="cursor-pointer p-1"
-                                    onClick={() =>
-                                        handleMentionClick(
-                                            user.nickname || user.username,
-                                            user.uid
-                                        )
-                                    }
-                                >
-                                    <UserInfo
-                                        isAdmin={false}
-                                        isOwner={false}
-                                        userUid={uid}
-                                        serverId={serverId}
-                                    ></UserInfo>
-                                </div>
-                            )
-                        );
-                    })}
+                <div
+                    className="rounded-xl shadow-md fixed left-[490px] bg-slate-100 dark:bg-slate-700 w-min z-20 p-2"
+                    style={{
+                        bottom: `calc(${textareaHeight} + 2rem)`,
+                    }}
+                >
+                    <ScrollArea className="w-60 h-56">
+                        {serverContentData?.memberList?.map((uid) => {
+                            const user = userData[uid];
+                            return (
+                                user && (
+                                    <div
+                                        key={uid}
+                                        className="cursor-pointer p-1"
+                                        onClick={() =>
+                                            handleMentionClick(
+                                                user.nickname || user.username,
+                                                user.uid
+                                            )
+                                        }
+                                    >
+                                        <UserInfo
+                                            isAdmin={false}
+                                            isOwner={false}
+                                            userUid={uid}
+                                            serverId={serverId}
+                                        ></UserInfo>
+                                    </div>
+                                )
+                            );
+                        })}
+                    </ScrollArea>
                 </div>
             )}
             {serverContent[0] === "textchannel" && messages && (
@@ -1682,7 +1866,12 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                             return (
                                 <div
                                     key={index}
-                                    className="flex items-start justify-start gap-4 w-full min-h-16 p-1"
+                                    className={cn(
+                                        "flex items-start justify-start gap-4 w-full min-h-16 p-1 ",
+                                        message.mentions.includes(user.uid)
+                                            ? "bg-violet-200 dark:bg-violet-950 rounded-xl shadow-sm"
+                                            : ""
+                                    )}
                                 >
                                     <Popover>
                                         <PopoverTrigger>
@@ -1750,12 +1939,16 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                     message.createdAt &&
                                                     (message.createdAt
                                                         .toDate()
-                                                        .getMinutes()
-                                                         < 10 ? 0 + message.createdAt
-                                                         .toDate()
-                                                         .getMinutes().toString() : message.createdAt
-                                                         .toDate()
-                                                         .getMinutes().toString())}
+                                                        .getMinutes() < 10
+                                                        ? 0 +
+                                                          message.createdAt
+                                                              .toDate()
+                                                              .getMinutes()
+                                                              .toString()
+                                                        : message.createdAt
+                                                              .toDate()
+                                                              .getMinutes()
+                                                              .toString())}
                                                 {message &&
                                                 message.createdAt &&
                                                 message.createdAt
@@ -1840,7 +2033,9 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                         </div>
                                                     )}
                                                 <div className="message-body">
-                                                    {renderMessageWithMentions(message)}
+                                                    {renderMessageWithMentions(
+                                                        message
+                                                    )}
                                                 </div>
                                                 {message.edited && (
                                                     <div className="text-[10px]">
