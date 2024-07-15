@@ -3,7 +3,7 @@ import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
 
-import firebase from "../../firebase/clientApp";
+import firebase, { firestore } from "../../firebase/clientApp";
 import { useAuthState } from "react-firebase-hooks/auth";
 import type { Auth } from "firebase/auth";
 
@@ -15,6 +15,7 @@ import ServerDashboard from "@/components/phiscord/ServerDashboard";
 import Dashboard from "@/components/phiscord/Dashboard";
 
 const HomePage = () => {
+
     const appId = "97053747cb414a02bb27de8e55549466";
     const auth = firebase.auth() as unknown as Auth;
     const [firebaseUser] = useAuthState(auth);
@@ -28,6 +29,38 @@ const HomePage = () => {
         cameraTrack: null,
     });
     const [start, setStart] = useState(false);
+
+    useEffect(() => {
+        const unsubscribe = firestore
+            .collection("users")
+            .doc(firebaseUser.uid)
+            .collection("notifications")
+            .onSnapshot((snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        const notificationData = change.doc.data();
+                        showNotification(notificationData);
+                        firestore
+                        .collection("users")
+                        .doc(firebaseUser.uid)
+                        .collection("notifications")
+                        .doc(change.doc.id).delete();
+                    }
+                });
+            });
+    
+        return () => unsubscribe();
+    }, [firebaseUser]);
+
+    const showNotification = (data) => {
+        const notification = {
+            title: data.title,
+            body: data.body,
+            icon: data.icon,
+            silent: false,
+        };
+        new Notification(notification.title, notification);
+    };
 
     const leaveCall = async () => {
         if (typeof window !== "undefined") {
@@ -73,7 +106,7 @@ const HomePage = () => {
             }
         });
     };
-    
+
     // Function to Unmute Remote Audio Tracks
     const undeafenAudio = (users) => {
         users.forEach((user) => {
@@ -180,7 +213,10 @@ const HomePage = () => {
                     />
                 )}
                 {activePage[0] === "server" && (
-                    <ServerDashboard setActivePage={setActivePage} serverId={activePage[1]} />
+                    <ServerDashboard
+                        setActivePage={setActivePage}
+                        serverId={activePage[1]}
+                    />
                 )}
                 <UserProfileBox />
             </div>

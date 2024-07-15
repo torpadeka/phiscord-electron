@@ -8,6 +8,10 @@ const { RtcTokenBuilder, RtcRole } = require("agora-access-token");
 
 const isProd = process.env.NODE_ENV === "production";
 
+if (process.platform === "win32") {
+    app.setAppUserModelId("PHiscord");
+}
+
 // AGORA BACKEND FOR RETRIEVING TOKENS BASED ON CHANNEL-NAMES
 const APP_ID = "97053747cb414a02bb27de8e55549466";
 const APP_CERTIFICATE = "2e62982b423148b582d9a9d71cd33606";

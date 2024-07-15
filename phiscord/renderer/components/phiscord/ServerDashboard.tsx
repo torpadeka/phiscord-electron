@@ -1,7 +1,7 @@
 import { firestore, storage } from "../../../firebase/clientApp";
 import firebase, { database } from "../../../firebase/clientApp";
 import type { Auth } from "firebase/auth";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
     Accordion,
@@ -51,6 +51,7 @@ import { ScrollArea } from "../ui/scroll-area";
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "../ui/toaster";
 import { useDropzone } from "react-dropzone";
+import { FaSearch } from "react-icons/fa";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -1807,6 +1808,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         memberList: Array<string>;
         ownerUid: string;
         adminList: Array<string>;
+        serverName: string;
     }
 
     const auth = firebase.auth() as unknown as Auth;
@@ -1832,6 +1834,8 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     const [mentionOpen, setMentionOpen] = useState(false);
     const [currentMentionIndex, setCurrentMentionIndex] = useState(null);
     const [mentionedUids, setMentionedUids] = useState([]);
+    const [searchingMessage, setSearchingMessage] = useState(false);
+    const [searchMessageInput, setSearchMessageInput] = useState("");
 
     const [isDropzoneVisible, setDropzoneVisible] = useState(false);
     const dragCounter = useRef(0);
@@ -1989,6 +1993,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                             memberList: currentMembers,
                             ownerUid: data.ownerUid || [],
                             adminList: data.adminList || [],
+                            serverName: data.serverName,
                         });
                     }
                     setLoading(false);
@@ -2104,12 +2109,10 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             let transformedMessage = inputValue;
             verifiedMentions.forEach(({ mentionText, uid }) => {
                 console.log(mentionText, uid);
-                transformedMessage = transformedMessage.replace(
-                    `@${mentionText}`,
-                    `@${uid}`
-                );
+                const mentionRegex = new RegExp(`@${mentionText}(?=\\s|\\b)`, 'g');
+                transformedMessage = transformedMessage.replace(mentionRegex, `@${uid}`);
             });
-
+            
             const newMessage = {
                 senderUid: user.uid,
                 isFileType: false,
@@ -2141,6 +2144,41 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             setInputValue("");
             setMentionedUids([]);
             scrollToBottom();
+
+            const channelName = await (
+                await firestore
+                    .collection("servers")
+                    .doc(serverId)
+                    .collection("textChannels")
+                    .doc(serverContent[1])
+                    .get()
+            ).data().channelName;
+            const notificationMessage = convertMentionsToText(
+                newMessage.text,
+                newMessage.mentions,
+                userData,
+                nicknames
+            );
+
+            serverContentData.memberList.forEach((member) => {
+                if (member !== user.uid) {
+                    // Add Notifications
+                    firestore
+                        .collection("users")
+                        .doc(member)
+                        .collection("notifications")
+                        .add({
+                            title:
+                                userData[user.uid].username +
+                                " - " +
+                                serverContentData.serverName +
+                                " #" +
+                                channelName,
+                            body: notificationMessage,
+                            icon: userData[user.uid].profilePicture,
+                        });
+                }
+            });
         }
     };
 
@@ -2247,8 +2285,41 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         return mentions;
     };
 
-    const handleEditMessageClick = (messageId, messageText) => {
-        setEditingMessage([true, messageId, messageText]);
+    // Function to convert mentions back to plain text with usernames or nicknames
+    const convertMentionsToText = (
+        messageText,
+        mentions,
+        userData,
+        nicknames
+    ) => {
+        const mentionRegex = /@([^\s@]+)/g; // Regex to match UID mentions prefixed with '@'
+    
+        return messageText.replace(mentionRegex, (match, mentionUid) => {
+            const user = userData[mentionUid];
+            if (user) {
+                return "@" + (nicknames[mentionUid] || user.username);
+            } else {
+                return match; // Return original match if user not found
+            }
+        });
+    };
+
+    // Example usage in your component
+    const handleEditMessageClick = (
+        messageId,
+        messageText,
+        messageMentions
+    ) => {
+        // Convert mentions in messageText back to plain text
+        const plainTextMessage = convertMentionsToText(
+            messageText,
+            messageMentions,
+            userData,
+            nicknames
+        );
+
+        // Set editing message state with plain text
+        setEditingMessage([true, messageId, plainTextMessage]);
     };
 
     const handleTextareaChange = (e) => {
@@ -2263,6 +2334,17 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         if (editingMessage[2] === "") {
             handleDeleteMessageClick(editingMessage[1]);
         } else {
+            // Transform mentions in editingMessage[2] to UIDs
+            const verifiedMentions = validateMentions(editingMessage[2]);
+
+            let transformedMessage = editingMessage[2];
+            verifiedMentions.forEach(({ mentionText, uid }) => {
+                transformedMessage = transformedMessage.replace(
+                    `@${mentionText}`,
+                    `@${uid}`
+                );
+            });
+
             await firestore
                 .collection("servers")
                 .doc(serverId)
@@ -2271,8 +2353,10 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 .collection("messages")
                 .doc(editingMessage[1])
                 .update({
-                    text: editingMessage[2],
+                    text: transformedMessage,
                     edited: true,
+                    mentions:
+                        verifiedMentions.length > 0 ? verifiedMentions : [],
                 });
         }
 
@@ -2337,62 +2421,6 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         return str.slice(0, num) + "...";
     };
 
-    const renderMessageWithMentions = (message) => {
-        const messageParts = message.text.split(/(@\S+)/); // Split message into parts by whitespace
-        const validMentions = message.mentions; // List of valid mentioned UIDs from the message
-    
-        return messageParts.map((part, index) => {
-            const mentionUid = part.startsWith('@') ? part.slice(1) : part;
-    
-            // Check if mentionUid exists in validMentions array
-            const isValidMention = validMentions.some((mention) => mention.uid === mentionUid);
-            console.log(isValidMention);
-    
-            if (isValidMention) {
-                // If part is a valid mention UID, replace with nickname or username
-                const user = userData[mentionUid];
-                if (user) {
-                    const mentionText = nicknames[mentionUid] || user.username;
-                    return (
-                        <Popover key={index}>
-                            <PopoverTrigger>
-                                <span
-                                    className="shadow-md px-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 cursor-pointer font-bold text-white"
-                                >
-                                    @{mentionText}
-                                </span>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                sideOffset={10}
-                                className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
-                            >
-                                <UserProfilePopup
-                                    serverId={serverId}
-                                    userUid={mentionUid}
-                                />
-                            </PopoverContent>
-                        </Popover>
-                    );
-                } else {
-                    return <span key={index}>@{mentionUid}</span>; // Fallback to UID if user not found
-                }
-            } else {
-                // Ensure part.text is a string
-                const textToClean = part ?? "";
-                try {
-                    return (
-                        <span key={index}>
-                            {filter.clean(textToClean)}
-                        </span>
-                    );
-                } catch (error) {
-                    console.log("Cancelled cleaning text:", textToClean, error);
-                    return <span key={index}>{textToClean}</span>;
-                }
-            }
-        });
-    };    
-
     return (
         <div className="relative h-full w-full bg-slate-200 dark:bg-slate-900 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar">
             {mentionOpen && (
@@ -2449,6 +2477,508 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                             paddingBottom: `calc(${textareaHeight} + 2rem)`,
                         }}
                     >
+                        <Dialog
+                            open={searchingMessage}
+                            onOpenChange={setSearchingMessage}
+                        >
+                            <DialogTrigger>
+                                <div
+                                    onClick={() => setSearchingMessage(true)}
+                                    className="shadow-md transition-all cursor-pointer hover:brightness-150 flex items-center justify-center w-10 h-10 bg-slate-600 rounded-full dark:bg-slate-600 fixed top-16 left-[376px] z-50"
+                                >
+                                    <FaSearch
+                                        className="fill-white"
+                                        size={20}
+                                    />
+                                </div>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle
+                                        className={cn(
+                                            "dark:text-white text-xl font-sans antialiased",
+                                            fontSans.variable
+                                        )}
+                                    >
+                                        Search Messages
+                                    </DialogTitle>
+                                    <DialogDescription
+                                        className={cn(
+                                            "dark:text-white text-xl font-sans antialiased",
+                                            fontSans.variable
+                                        )}
+                                    >
+                                        <div className="flex flex-col items-center justify-center gap-3 pt-4">
+                                            <Input
+                                                type="text"
+                                                placeholder="Search Here"
+                                                value={searchMessageInput}
+                                                onChange={(e) =>
+                                                    setSearchMessageInput(
+                                                        e.target.value
+                                                    )
+                                                }
+                                                className="w-full bg-slate-300 dark:bg-slate-700 rounded-2xl mt-4 p-4"
+                                            ></Input>
+                                            <ScrollArea className="w-[460px] h-72">
+                                                {messages.map(
+                                                    (message, index) => {
+                                                        const senderData =
+                                                            userData[
+                                                                message
+                                                                    .senderUid
+                                                            ];
+                                                        if (
+                                                            message.text &&
+                                                            message.text
+                                                                .toLowerCase()
+                                                                .includes(
+                                                                    searchMessageInput.toLowerCase()
+                                                                )
+                                                        )
+                                                            return (
+                                                                <div
+                                                                    key={index}
+                                                                    className={cn(
+                                                                        "flex items-start justify-start gap-4 w-full min-h-16 p-1 my-1",
+                                                                        message.mentions.some(
+                                                                            (
+                                                                                mention
+                                                                            ) =>
+                                                                                mention.uid ===
+                                                                                user.uid
+                                                                        )
+                                                                            ? "bg-violet-200 dark:bg-violet-950 rounded-xl shadow-sm"
+                                                                            : ""
+                                                                    )}
+                                                                >
+                                                                    <Popover>
+                                                                        <PopoverTrigger>
+                                                                            <Avatar className="bg-white">
+                                                                                <AvatarImage
+                                                                                    src={
+                                                                                        senderData
+                                                                                            ? senderData.profilePicture
+                                                                                            : null
+                                                                                    }
+                                                                                />
+                                                                                <AvatarFallback>{`:(`}</AvatarFallback>
+                                                                            </Avatar>
+                                                                        </PopoverTrigger>
+                                                                        <PopoverContent
+                                                                            sideOffset={
+                                                                                10
+                                                                            }
+                                                                            className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
+                                                                        >
+                                                                            <UserProfilePopup
+                                                                                serverId={
+                                                                                    serverId
+                                                                                }
+                                                                                userUid={
+                                                                                    message.senderUid
+                                                                                }
+                                                                            ></UserProfilePopup>
+                                                                        </PopoverContent>
+                                                                    </Popover>
+                                                                    <div className="flex flex-col items-start justify-center">
+                                                                        <div className="flex items-center justify-center gap-1">
+                                                                            <span className="font-bold text-black dark:text-white text-lg">
+                                                                                {senderData
+                                                                                    ? nicknames[
+                                                                                          message
+                                                                                              .senderUid
+                                                                                      ] ||
+                                                                                      senderData.username
+                                                                                    : "Loading..."}
+                                                                            </span>
+                                                                            <span className="text-black dark:text-white text-[11px]">
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    (
+                                                                                        message.createdAt
+                                                                                            .toDate()
+                                                                                            .getMonth() +
+                                                                                        1
+                                                                                    ).toString()}
+
+                                                                                /
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    message.createdAt
+                                                                                        .toDate()
+                                                                                        .getDate()
+                                                                                        .toString()}
+
+                                                                                /
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    message.createdAt
+                                                                                        .toDate()
+                                                                                        .getFullYear()
+                                                                                        .toString()}
+                                                                            </span>
+                                                                            <span className="text-black dark:text-white text-[11px]">
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    message.createdAt
+                                                                                        .toDate()
+                                                                                        .getHours()
+                                                                                        .toString()}
+
+                                                                                :
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    (message.createdAt
+                                                                                        .toDate()
+                                                                                        .getMinutes() <
+                                                                                    10
+                                                                                        ? 0 +
+                                                                                          message.createdAt
+                                                                                              .toDate()
+                                                                                              .getMinutes()
+                                                                                              .toString()
+                                                                                        : message.createdAt
+                                                                                              .toDate()
+                                                                                              .getMinutes()
+                                                                                              .toString())}
+                                                                                {message &&
+                                                                                message.createdAt &&
+                                                                                message.createdAt
+                                                                                    .toDate()
+                                                                                    .getHours() >
+                                                                                    11 &&
+                                                                                message.createdAt
+                                                                                    .toDate()
+                                                                                    .getHours() <
+                                                                                    24
+                                                                                    ? " PM"
+                                                                                    : " AM"}
+                                                                            </span>
+                                                                        </div>
+                                                                        <ContextMenu>
+                                                                            <ContextMenuTrigger>
+                                                                                {message.isFileType &&
+                                                                                    message.isImageType &&
+                                                                                    !message.isVideoType && (
+                                                                                        <div className="flex flex-col gap-2 items-start">
+                                                                                            <a
+                                                                                                href={
+                                                                                                    message.file
+                                                                                                }
+                                                                                                target="_blank"
+                                                                                                rel="noopener noreferrer"
+                                                                                            >
+                                                                                                <img
+                                                                                                    className="max-h-60 rounded-xl"
+                                                                                                    src={
+                                                                                                        message.file
+                                                                                                    }
+                                                                                                ></img>
+                                                                                            </a>
+                                                                                            <div className="text-sm italic">
+                                                                                                {truncateString(
+                                                                                                    message.fileName,
+                                                                                                    50
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                {message.isFileType &&
+                                                                                    !message.isImageType &&
+                                                                                    message.isVideoType && (
+                                                                                        <div className="flex flex-col gap-2 items-start">
+                                                                                            <video
+                                                                                                className="max-h-60 rounded-xl"
+                                                                                                src={
+                                                                                                    message.file
+                                                                                                }
+                                                                                                controls={
+                                                                                                    true
+                                                                                                }
+                                                                                            ></video>
+                                                                                            <div className="text-sm italic">
+                                                                                                {truncateString(
+                                                                                                    message.fileName,
+                                                                                                    50
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                {message.isFileType &&
+                                                                                    !message.isImageType &&
+                                                                                    !message.isVideoType && (
+                                                                                        <div className="flex flex-col gap-2 items-start">
+                                                                                            <a
+                                                                                                href={
+                                                                                                    message.file
+                                                                                                }
+                                                                                                target="_blank"
+                                                                                                rel="noopener noreferrer"
+                                                                                            >
+                                                                                                <FaFile
+                                                                                                    className="m-2"
+                                                                                                    size={
+                                                                                                        70
+                                                                                                    }
+                                                                                                />
+                                                                                            </a>
+                                                                                            <div className="text-sm italic">
+                                                                                                {truncateString(
+                                                                                                    message.fileName,
+                                                                                                    50
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                {message.text && (
+                                                                                    <div className="message-body text-base">
+                                                                                        <MessageComponent
+                                                                                            message={
+                                                                                                message
+                                                                                            }
+                                                                                            nicknames={
+                                                                                                nicknames
+                                                                                            }
+                                                                                            serverId={
+                                                                                                serverId
+                                                                                            }
+                                                                                            userData={
+                                                                                                userData
+                                                                                            }
+                                                                                            key={
+                                                                                                index
+                                                                                            }
+                                                                                        ></MessageComponent>
+                                                                                    </div>
+                                                                                )}
+                                                                                {message.edited && (
+                                                                                    <div className="text-[10px]">
+                                                                                        (edited)
+                                                                                    </div>
+                                                                                )}
+                                                                            </ContextMenuTrigger>
+                                                                            <ContextMenuContent
+                                                                                className={cn(
+                                                                                    "dark:text-white text-sm font-sans antialiased",
+                                                                                    fontSans.variable
+                                                                                )}
+                                                                            >
+                                                                                {(canModifyMessage(
+                                                                                    message.senderUid
+                                                                                ) && (
+                                                                                    <>
+                                                                                        {!message.file && (
+                                                                                            <ContextMenuItem
+                                                                                                onClick={() => {
+                                                                                                    handleEditMessageClick(
+                                                                                                        message.messageId,
+                                                                                                        message.text,
+                                                                                                        message.mentions
+                                                                                                    );
+                                                                                                }}
+                                                                                            >
+                                                                                                Edit
+                                                                                                Message
+                                                                                            </ContextMenuItem>
+                                                                                        )}
+                                                                                        <ContextMenuItem
+                                                                                            onClick={() => {
+                                                                                                handleDeleteMessageClick(
+                                                                                                    message.messageId
+                                                                                                );
+                                                                                            }}
+                                                                                        >
+                                                                                            Delete
+                                                                                            Message
+                                                                                        </ContextMenuItem>
+                                                                                    </>
+                                                                                )) ||
+                                                                                    (user.uid ===
+                                                                                        serverContentData.ownerUid ||
+                                                                                    serverContentData.adminList.includes(
+                                                                                        user.uid
+                                                                                    ) ? (
+                                                                                        <ContextMenuItem
+                                                                                            onClick={() => {
+                                                                                                handleDeleteMessageClick(
+                                                                                                    message.messageId
+                                                                                                );
+                                                                                            }}
+                                                                                        >
+                                                                                            Delete
+                                                                                            Message
+                                                                                        </ContextMenuItem>
+                                                                                    ) : (
+                                                                                        <span className="text-red-600">
+                                                                                            You
+                                                                                            can't
+                                                                                            modify
+                                                                                            this
+                                                                                            message!
+                                                                                        </span>
+                                                                                    ))}
+                                                                            </ContextMenuContent>
+                                                                        </ContextMenu>
+                                                                    </div>
+                                                                    <Dialog
+                                                                        open={
+                                                                            editingMessage[0]
+                                                                        }
+                                                                        onOpenChange={(
+                                                                            isOpen
+                                                                        ) =>
+                                                                            setEditingMessage(
+                                                                                [
+                                                                                    isOpen,
+                                                                                    editingMessage[1],
+                                                                                    editingMessage[2],
+                                                                                ]
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <DialogContent>
+                                                                            <DialogHeader className="flex flex-col gap-4">
+                                                                                <DialogTitle
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    Edit
+                                                                                    Message
+                                                                                </DialogTitle>
+                                                                                <DialogDescription
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    <TextareaAutosize
+                                                                                        value={
+                                                                                            editingMessage[2]
+                                                                                        }
+                                                                                        onChange={
+                                                                                            handleTextareaChange
+                                                                                        }
+                                                                                        className={cn(
+                                                                                            "flex w-full min-h-10 rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-slate-300 dark:bg-slate-700 resize-none no-scrollbar no-scrollbar::-webkit-scrollbar"
+                                                                                        )}
+                                                                                    ></TextareaAutosize>
+
+                                                                                    <div className="w-full flex justify-end pt-4 gap-4">
+                                                                                        <Popover>
+                                                                                            <PopoverTrigger>
+                                                                                                <MdEmojiEmotions className="w-9 h-9 p-1 rounded-xl fill-black dark:fill-white" />
+                                                                                            </PopoverTrigger>
+                                                                                            <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-96">
+                                                                                                <EmojiPicker
+                                                                                                    onEmojiClick={
+                                                                                                        onEditEmojiClick
+                                                                                                    }
+                                                                                                />
+                                                                                            </PopoverContent>
+                                                                                        </Popover>
+                                                                                        <Button
+                                                                                            onClick={
+                                                                                                handleConfirmEditMessage
+                                                                                            }
+                                                                                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                                        >
+                                                                                            Confirm
+                                                                                            Edit
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </DialogDescription>
+                                                                            </DialogHeader>
+                                                                        </DialogContent>
+                                                                    </Dialog>
+                                                                    <Dialog
+                                                                        open={
+                                                                            deletingMessage[0]
+                                                                        }
+                                                                        onOpenChange={(
+                                                                            isOpen
+                                                                        ) =>
+                                                                            setDeletingMessage(
+                                                                                [
+                                                                                    isOpen,
+                                                                                    deletingMessage[1],
+                                                                                ]
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <DialogContent>
+                                                                            <DialogHeader className="flex flex-col gap-4">
+                                                                                <DialogTitle
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    Confirm
+                                                                                    Message
+                                                                                    Deletion?
+                                                                                </DialogTitle>
+                                                                                <DialogDescription
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    <span className="text-red text-[16px]">
+                                                                                        The
+                                                                                        message
+                                                                                        will
+                                                                                        be
+                                                                                        permanently
+                                                                                        deleted
+                                                                                        from
+                                                                                        our
+                                                                                        database!
+                                                                                        This
+                                                                                        cannot
+                                                                                        be
+                                                                                        undone!
+                                                                                    </span>
+                                                                                    <div className="w-full flex justify-end pt-4 gap-4">
+                                                                                        <Button
+                                                                                            onClick={
+                                                                                                handleConfirmDeleteMessage
+                                                                                            }
+                                                                                            className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                                        >
+                                                                                            Confirm
+                                                                                        </Button>
+                                                                                        <Button
+                                                                                            onClick={() => {
+                                                                                                setDeletingMessage(
+                                                                                                    [
+                                                                                                        false,
+                                                                                                        "",
+                                                                                                    ]
+                                                                                                );
+                                                                                            }}
+                                                                                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                                        >
+                                                                                            Cancel
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </DialogDescription>
+                                                                            </DialogHeader>
+                                                                        </DialogContent>
+                                                                    </Dialog>
+                                                                </div>
+                                                            );
+                                                    }
+                                                )}
+                                            </ScrollArea>
+                                        </div>
+                                    </DialogDescription>
+                                </DialogHeader>
+                            </DialogContent>
+                        </Dialog>
+
                         <span className="flex w-full text-sm items-center justify-center py-10 dark:text-slate-300 text-slate-700">
                             Herein begins the great history of the renowned chat
                         </span>
@@ -2459,9 +2989,13 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                     key={index}
                                     className={cn(
                                         "flex items-start justify-start gap-4 w-full min-h-16 p-1 my-1",
-                                        message.mentions.some((mention) => mention.uid === user.uid)
+                                        message.mentions &&
+                                            message.mentions.some(
+                                                (mention) =>
+                                                    mention.uid === user.uid
+                                            )
                                             ? "bg-violet-200 dark:bg-violet-950 rounded-xl shadow-sm"
-                                                : ""
+                                            : ""
                                     )}
                                 >
                                     <Popover>
@@ -2626,9 +3160,15 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                     )}
                                                 {message.text && (
                                                     <div className="message-body">
-                                                        {renderMessageWithMentions(
-                                                            message
-                                                        )}
+                                                        <MessageComponent
+                                                            message={message}
+                                                            nicknames={
+                                                                nicknames
+                                                            }
+                                                            serverId={serverId}
+                                                            userData={userData}
+                                                            key={index}
+                                                        ></MessageComponent>
                                                     </div>
                                                 )}
                                                 {message.edited && (
@@ -2652,7 +3192,8 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                                 onClick={() => {
                                                                     handleEditMessageClick(
                                                                         message.messageId,
-                                                                        message.text
+                                                                        message.text,
+                                                                        message.mentions
                                                                     );
                                                                 }}
                                                             >
@@ -2880,6 +3421,70 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             )}
         </div>
     );
+};
+
+const MessageComponent = ({ message, userData, serverId, nicknames }) => {
+    const Filter = require("bad-words");
+    const filter = new Filter();
+
+    // Define renderMessageWithMentions before using it in useMemo
+    const renderMessageWithMentions = (message) => {
+        const messageParts = message.text.split(/(@[^\s@]+)/g); // Split message into parts
+        const validMentions = message.mentions; // List of valid mentioned UIDs from the message
+
+        return messageParts.map((part, index) => {
+            const mentionUid = part.startsWith("@") ? part.slice(1) : part;
+
+            // Check if mentionUid exists in validMentions array
+            const isValidMention = validMentions.some(
+                (mention) => mention.uid === mentionUid
+            );
+
+            if (isValidMention) {
+                // If part is a valid mention UID, replace with nickname or username
+                const user = userData[mentionUid];
+                if (user) {
+                    const mentionText = nicknames[mentionUid] || user.username;
+                    return (
+                        <Popover key={index}>
+                            <PopoverTrigger>
+                                <span className="shadow-md px-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 cursor-pointer font-bold text-white">
+                                    @{mentionText}
+                                </span>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                sideOffset={10}
+                                className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
+                            >
+                                <UserProfilePopup
+                                    serverId={serverId}
+                                    userUid={mentionUid}
+                                />
+                            </PopoverContent>
+                        </Popover>
+                    );
+                } else {
+                    return <span key={index}>@{mentionUid}</span>; // Fallback to UID if user not found
+                }
+            } else {
+                // Ensure part.text is a string
+                const textToClean = part ?? "";
+                try {
+                    return <span key={index}>{filter.clean(textToClean)}</span>;
+                } catch (error) {
+                    console.log("Cancelled cleaning text:", textToClean, error);
+                    return <span key={index}>{textToClean}</span>;
+                }
+            }
+        });
+    };
+
+    // Memoize the rendered message output
+    const renderedMessage = useMemo(() => {
+        return renderMessageWithMentions(message);
+    }, [message, userData, serverId, nicknames]); // Include dependencies if needed
+
+    return <div className="message-body">{renderedMessage}</div>;
 };
 
 const ServerDashboardInfo = ({ serverId }) => {

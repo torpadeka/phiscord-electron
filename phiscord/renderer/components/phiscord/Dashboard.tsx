@@ -1022,6 +1022,33 @@ const DashboardContent = ({
             setInputValue("");
 
             scrollToBottom();
+
+            const conversationRef = await firestore
+                .collection("conversations")
+                .doc(conversationId).get();
+
+            const uids : string = conversationRef.data().userIds;
+            let receiverUid;
+            let senderUid;
+
+            if(uids[0] === user.uid){
+                receiverUid = uids[1];
+                senderUid = uids[0];
+            } else{
+                receiverUid = uids[0];
+                senderUid = uids[1];
+            }
+
+            console.log(uids[0]);
+            console.log(uids[1]);
+            console.log(receiverUid);
+
+            // Add Notifications
+            firestore.collection("users").doc(receiverUid).collection("notifications").add({
+                title: userData[senderUid].username,
+                body: newMessage.text,
+                icon: userData[senderUid].profilePicture,
+            })
         }
     };
 
