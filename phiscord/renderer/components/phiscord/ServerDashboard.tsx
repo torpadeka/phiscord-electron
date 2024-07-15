@@ -50,6 +50,7 @@ import { Input } from "../ui/input";
 import { ScrollArea } from "../ui/scroll-area";
 import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "../ui/toaster";
+import { useDropzone } from "react-dropzone";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -130,6 +131,36 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
     const [addNewVoiceChannelError, setAddNewVoiceChannelError] = useState("");
     const [newTextChannelInput, setNewTextChannelInput] = useState("");
     const [newVoiceChannelInput, setNewVoiceChannelInput] = useState("");
+    const [editingTextChannel, setEditingTextChannel] = useState<
+        boolean | string
+    >(false);
+    const [editingVoiceChannel, setEditingVoiceChannel] = useState<
+        boolean | string
+    >(false);
+    const [editingTextChannelInput, setEditingTextChannelInput] = useState("");
+    const [editingVoiceChannelInput, setEditingVoiceChannelInput] =
+        useState("");
+    const [editingTextChannelError, setEditingTextChannelError] = useState("");
+    const [editingVoiceChannelError, setEditingVoiceChannelError] =
+        useState("");
+    const [deletingTextChannel, setDeletingTextChannel] = useState<
+        boolean | string
+    >(false);
+    const [deletingVoiceChannel, setDeletingVoiceChannel] = useState<
+        boolean | string
+    >(false);
+
+    useEffect(() => {
+        setAddNewTextChannelError("");
+        setAddNewVoiceChannelError("");
+        setEditingTextChannelError("");
+        setEditingVoiceChannelError("");
+    }, [
+        addingTextChannel,
+        addingVoiceChannel,
+        editingTextChannel,
+        editingVoiceChannel,
+    ]);
 
     useEffect(() => {
         setSelectedChannel([null, null]);
@@ -229,7 +260,6 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
 
         return () => {
             unsubscribe();
-            console.log(serverNavigationData);
         };
     }, [serverId]);
 
@@ -365,10 +395,19 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
     };
 
     const handleKickMember = async (userUid) => {
-        const index = serverNavigationData.memberList.indexOf(userUid, 0);
-        if (index > -1) {
-            serverNavigationData.memberList.splice(index, 1);
+        const memberIndex = serverNavigationData.memberList.indexOf(userUid, 0);
+        if (memberIndex > -1) {
+            serverNavigationData.memberList.splice(memberIndex, 1);
         }
+
+        const adminIndex = serverNavigationData.adminList.indexOf(userUid, 0);
+        if (adminIndex > -1) {
+            serverNavigationData.adminList.splice(adminIndex, 1);
+        }
+
+        await firestore.collection("servers").doc(serverId).update({
+            adminList: serverNavigationData.adminList,
+        });
 
         await firestore.collection("servers").doc(serverId).update({
             memberList: serverNavigationData.memberList,
@@ -382,7 +421,7 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
     };
 
     const handleCreateNewTextChannel = async () => {
-        if (newTextChannelInput === "") {
+        if (newTextChannelInput === "" || !/\S/.test(newTextChannelInput)) {
             setAddNewTextChannelError("Channel name can't be empty!");
             return;
         }
@@ -421,12 +460,12 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
     };
 
     const handleCreateNewVoiceChannel = async () => {
-        if (newVoiceChannelInput === "") {
+        if (newVoiceChannelInput === "" || !/\S/.test(newVoiceChannelInput)) {
             setAddNewVoiceChannelError("Channel name can't be empty!");
             return;
         }
 
-        const alphanumericRegex = /^[a-z0-9-]+$/i;
+        const alphanumericRegex = /^[a-z0-9- ]+$/i;
         if (!alphanumericRegex.test(newVoiceChannelInput)) {
             setAddNewVoiceChannelError(
                 "Voice channel names can only contain alphabets, numbers, spaces and dashes!"
@@ -448,9 +487,374 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
         setToastMessage("Successfully created new voice channel!");
     };
 
+    const handleEditTextChannel = async () => {
+        if (
+            editingTextChannelInput === "" ||
+            !/\S/.test(editingTextChannelInput)
+        ) {
+            setEditingTextChannelError("Channel name can't be empty!");
+            return;
+        }
+
+        if (editingTextChannelInput.includes(" ")) {
+            setEditingTextChannelError(
+                "Text channel names can't contain spaces!"
+            );
+            return;
+        }
+
+        const alphanumericRegex = /^[a-z0-9-]+$/i;
+        if (!alphanumericRegex.test(editingTextChannelInput)) {
+            setEditingTextChannelError(
+                "Text channel names can only contain alphabets, numbers and dashes!"
+            );
+            return;
+        }
+
+        await firestore
+            .collection("servers")
+            .doc(serverId)
+            .collection("textChannels")
+            .doc(editingTextChannel.toString())
+            .update({
+                channelName: editingTextChannelInput.toLowerCase(),
+            });
+
+        setEditingTextChannelInput("");
+        setEditingTextChannel(false);
+        setEditingTextChannelError("");
+        setToastMessage("Successfully edited text channel!");
+    };
+
+    const handleEditVoiceChannel = async () => {
+        if (
+            editingVoiceChannelInput === "" ||
+            !/\S/.test(editingVoiceChannelInput)
+        ) {
+            setEditingVoiceChannelError("Channel name can't be empty!");
+            return;
+        }
+
+        const alphanumericRegex = /^[a-z0-9- ]+$/i;
+        if (!alphanumericRegex.test(editingVoiceChannelInput)) {
+            setEditingVoiceChannelError(
+                "Voice channel names can only contain alphabets, numbers, spaces and dashes!"
+            );
+            return;
+        }
+
+        await firestore
+            .collection("servers")
+            .doc(serverId)
+            .collection("voiceChannels")
+            .doc(editingVoiceChannel.toString())
+            .update({
+                channelName: editingVoiceChannelInput,
+            });
+
+        setEditingVoiceChannelInput("");
+        setEditingVoiceChannel(false);
+        setEditingVoiceChannelError("");
+        setToastMessage("Successfully edited voice channel!");
+    };
+
+    const handleDeleteTextChannel = async () => {
+        await firestore
+            .collection("servers")
+            .doc(serverId)
+            .collection("textChannels")
+            .doc(deletingTextChannel.toString())
+            .delete();
+
+        if (
+            selectedChannel[0] === "textchannel" &&
+            selectedChannel[1] === deletingTextChannel.toString()
+        ) {
+            setServerContent([null, null]);
+        }
+
+        const listRef = storage
+            .ref()
+            .child(
+                `servers/messages/${serverId}/${deletingTextChannel.toString()}/`
+            );
+
+        // List all files in the folder and delete them
+        listRef
+            .listAll()
+            .then(async (result) => {
+                // Delete each file in the folder
+                const deletePromises = result.items.map((fileRef) =>
+                    fileRef.delete()
+                );
+
+                // Wait for all delete promises to resolve
+                await Promise.all(deletePromises);
+
+                // Now check if there are any remaining sub-folders and delete them
+                const deleteFolderPromises = result.prefixes.map((folderRef) =>
+                    handleDeleteSubFolder(folderRef)
+                );
+                await Promise.all(deleteFolderPromises);
+            })
+            .catch((error) => {
+                console.error("Error listing files:", error);
+            });
+
+        setDeletingTextChannel(false);
+        setToastMessage("Successfully deleted text channel!");
+    };
+
+    const handleDeleteSubFolder = async (folderRef) => {
+        return folderRef
+            .listAll()
+            .then(async (result) => {
+                // Delete each file in the sub-folder
+                const deletePromises = result.items.map((fileRef) =>
+                    fileRef.delete()
+                );
+
+                // Wait for all delete promises to resolve
+                await Promise.all(deletePromises);
+
+                // Recursively delete any sub-folders
+                const deleteFolderPromises = result.prefixes.map(
+                    (subFolderRef) => handleDeleteSubFolder(subFolderRef)
+                );
+                await Promise.all(deleteFolderPromises);
+
+                console.log(
+                    `All files in the folder ${folderRef.fullPath} have been deleted`
+                );
+            })
+            .catch((error) => {
+                console.error("Error listing files in sub-folder:", error);
+            });
+    };
+
+    const handleDeleteVoiceChannel = async () => {
+        await firestore
+            .collection("servers")
+            .doc(serverId)
+            .collection("voiceChannels")
+            .doc(deletingVoiceChannel.toString())
+            .delete();
+
+        if (
+            selectedChannel[0] === "voicechannel" &&
+            selectedChannel[1] === deletingVoiceChannel.toString()
+        ) {
+            setServerContent([null, null]);
+        }
+
+        if (
+            selectedChannel[0] === "voicechannel" &&
+            selectedChannel[1] === deletingVoiceChannel.toString()
+        ) {
+            setServerContent([null, null]);
+        }
+
+        setDeletingVoiceChannel(false);
+        setToastMessage("Successfully deleted voice channel!");
+    };
+
     return !loading ? (
         <>
             <Toaster />
+            <Dialog
+                open={editingTextChannel !== false}
+                onOpenChange={setEditingTextChannel}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            Edit Text Channel
+                        </DialogTitle>
+                        <DialogDescription
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            <div className="flex flex-col items-center justify-center gap-3 pt-4">
+                                <Label>Enter Text Channel Name</Label>
+                                <Input
+                                    type="text"
+                                    placeholder="epic-channel"
+                                    value={editingTextChannelInput}
+                                    onChange={(e) =>
+                                        setEditingTextChannelInput(
+                                            e.target.value
+                                        )
+                                    }
+                                    className="w-full bg-slate-300 dark:bg-slate-700 rounded-2xl mt-4 p-4"
+                                ></Input>
+                                <Label
+                                    className={cn(
+                                        "text-red-500 text-sm font-sans antialiased mt-1 text-center w-3/4",
+                                        fontSans.variable
+                                    )}
+                                >
+                                    {editingTextChannelError}
+                                </Label>
+                                <Button
+                                    onClick={handleEditTextChannel}
+                                    className="mt-1 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
+                                >
+                                    Edit Text Channel
+                                </Button>
+                            </div>
+                        </DialogDescription>
+                    </DialogHeader>
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={editingVoiceChannel !== false}
+                onOpenChange={setEditingVoiceChannel}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            Edit Voice Channel
+                        </DialogTitle>
+                        <DialogDescription
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            <div className="flex flex-col items-center justify-center gap-3 pt-4">
+                                <Label>Enter Voice Channel Name</Label>
+                                <Input
+                                    type="text"
+                                    placeholder="Epic Channel"
+                                    value={editingVoiceChannelInput}
+                                    onChange={(e) =>
+                                        setEditingVoiceChannelInput(
+                                            e.target.value
+                                        )
+                                    }
+                                    className="w-full bg-slate-300 dark:bg-slate-700 rounded-2xl mt-4 p-4"
+                                ></Input>
+                                <Label
+                                    className={cn(
+                                        "text-red-500 text-sm font-sans antialiased mt-1 text-center w-3/4",
+                                        fontSans.variable
+                                    )}
+                                >
+                                    {editingVoiceChannelError}
+                                </Label>
+                                <Button
+                                    onClick={handleEditVoiceChannel}
+                                    className="mt-1 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
+                                >
+                                    Edit Voice Channel
+                                </Button>
+                            </div>
+                        </DialogDescription>
+                    </DialogHeader>
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={deletingTextChannel !== false}
+                onOpenChange={setDeletingTextChannel}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            Delete Text Channel
+                        </DialogTitle>
+                        <DialogDescription
+                            className={cn(
+                                "dark:text-white text-[16px] font-sans antialiased flex flex-col gap-4",
+                                fontSans.variable
+                            )}
+                        >
+                            <div>
+                                Deleting this text channel cannot be undone!
+                            </div>
+                            <div className="flex items-center justify-end w-full gap-4">
+                                <Button
+                                    className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                    onClick={() => {
+                                        handleDeleteTextChannel();
+                                    }}
+                                >
+                                    Confirm Deletion
+                                </Button>
+                                <Button
+                                    onClick={() =>
+                                        setDeletingTextChannel(false)
+                                    }
+                                    className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </DialogDescription>
+                    </DialogHeader>
+                </DialogContent>
+            </Dialog>
+            <Dialog
+                open={deletingVoiceChannel !== false}
+                onOpenChange={setDeletingVoiceChannel}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle
+                            className={cn(
+                                "dark:text-white text-xl font-sans antialiased",
+                                fontSans.variable
+                            )}
+                        >
+                            Delete Voice Channel
+                        </DialogTitle>
+                        <DialogDescription
+                            className={cn(
+                                "dark:text-white text-[16px] font-sans antialiased flex flex-col gap-4",
+                                fontSans.variable
+                            )}
+                        >
+                            <div>
+                                Deleting this voice channel cannot be undone!
+                            </div>
+                            <div className="flex items-center justify-end w-full gap-4">
+                                <Button
+                                    className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                    onClick={() => {
+                                        handleDeleteVoiceChannel();
+                                    }}
+                                >
+                                    Confirm Deletion
+                                </Button>
+                                <Button
+                                    onClick={() =>
+                                        setDeletingVoiceChannel(false)
+                                    }
+                                    className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                >
+                                    Cancel
+                                </Button>
+                            </div>
+                        </DialogDescription>
+                    </DialogHeader>
+                </DialogContent>
+            </Dialog>
             <Dialog
                 open={addingTextChannel}
                 onOpenChange={setAddingTextChannel}
@@ -522,7 +926,7 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                                 <Label>Enter Voice Channel Name</Label>
                                 <Input
                                     type="text"
-                                    placeholder="epic-channel"
+                                    placeholder="Epic Channel"
                                     onChange={handleNewVoiceChannelInputChange}
                                     className="w-full bg-slate-300 dark:bg-slate-700 rounded-2xl mt-4 p-4"
                                 ></Input>
@@ -968,7 +1372,7 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                 </DialogContent>
             </Dialog>
             <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-start px-4">
-                <div className="flex items-center justify-between sticky top-0 text-black dark:text-white text-xl bg-slate-100 dark:bg-slate-700 w-full h-12 pt-3 border-b font-bold">
+                <div className="mb-2 flex items-center justify-between sticky top-0 text-black dark:text-white text-xl bg-slate-100 dark:bg-slate-700 w-full h-12 pt-3 border-b font-bold z-50">
                     <span>{serverNavigationData.serverName}</span>
                     <div>
                         {(user.uid === serverNavigationData.ownerUid ||
@@ -983,134 +1387,231 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                         )}
                     </div>
                 </div>
-                <Accordion
-                    type="multiple"
-                    defaultValue={["text-channels", "voice-channels"]}
-                    className="w-full"
-                >
-                    <AccordionItem value="text-channels" className="border-b">
-                        <div className="w-full flex items-center justify-between text-sm">
-                            <AccordionTrigger className="w-60 hover:text-slate-400 dark:hover:brightness-90">
-                                TEXT CHANNELS
-                            </AccordionTrigger>
-                            {(user.uid === serverNavigationData.ownerUid ||
-                                serverNavigationData.adminList.includes(
-                                    user.uid
-                                )) && (
-                                <FaPlus
-                                    size={12}
-                                    onClick={() => setAddingTextChannel(true)}
-                                    className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
-                                />
-                            )}
-                        </div>
-                        <AccordionContent className="flex flex-col items-start justify-center gap-1 w-full">
-                            {serverNavigationData.textChannels.map(
-                                (textChannel) =>
-                                    textChannel && (
-                                        <div
-                                            key={textChannel.textChannelId}
-                                            className={cn(
-                                                "flex w-full h-8 cursor-pointer items-center justify-between px-2 rounded-xl dark:hover:bg-slate-800 hover:bg-slate-300",
-                                                selectedChannel[0] ===
-                                                    "textchannel" &&
-                                                    selectedChannel[1] ===
-                                                        textChannel.textChannelId
-                                                    ? "dark:bg-slate-800 bg-slate-300"
-                                                    : null
-                                            )}
-                                            onClick={(e) => {
-                                                e.stopPropagation(); // Prevent event bubbling
-                                                console.log(
-                                                    "TEXT CHANNEL CLICK!"
-                                                );
-                                                setSelectedChannel([
-                                                    "textchannel",
-                                                    textChannel.textChannelId,
-                                                ]);
-                                                setServerContent([
-                                                    "textchannel",
-                                                    textChannel.textChannelId,
-                                                ]);
-                                            }}
-                                        >
-                                            <div className="w-full flex items-center gap-1 justify-start">
-                                                <FaHashtag size={15} />
-                                                <span>
+                <ScrollArea className="w-full h-[82%]">
+                    <Accordion
+                        type="multiple"
+                        defaultValue={["text-channels", "voice-channels"]}
+                        className="w-[95%]"
+                    >
+                        <AccordionItem
+                            value="text-channels"
+                            className="border-b"
+                        >
+                            <div className="w-full flex items-center justify-between text-sm">
+                                <AccordionTrigger className="w-56 hover:text-slate-400 dark:hover:brightness-90">
+                                    TEXT CHANNELS
+                                </AccordionTrigger>
+                                {(user.uid === serverNavigationData.ownerUid ||
+                                    serverNavigationData.adminList.includes(
+                                        user.uid
+                                    )) && (
+                                    <FaPlus
+                                        size={12}
+                                        onClick={() =>
+                                            setAddingTextChannel(true)
+                                        }
+                                        className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
+                                    />
+                                )}
+                            </div>
+                            <AccordionContent className="flex flex-col items-start justify-center gap-1 w-full">
+                                {serverNavigationData.textChannels.map(
+                                    (textChannel) =>
+                                        textChannel && (
+                                            <div
+                                                key={textChannel.textChannelId}
+                                                className={cn(
+                                                    "flex w-full h-8 cursor-pointer items-center justify-between px-2 rounded-xl dark:hover:bg-slate-800 hover:bg-slate-300",
+                                                    selectedChannel[0] ===
+                                                        "textchannel" &&
+                                                        selectedChannel[1] ===
+                                                            textChannel.textChannelId
+                                                        ? "dark:bg-slate-800 bg-slate-300"
+                                                        : null
+                                                )}
+                                            >
+                                                <div
+                                                    className="w-full flex items-center gap-1 justify-start"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation(); // Prevent event bubbling
+                                                        console.log(
+                                                            "TEXT CHANNEL CLICK!"
+                                                        );
+                                                        setSelectedChannel([
+                                                            "textchannel",
+                                                            textChannel.textChannelId,
+                                                        ]);
+                                                        setServerContent([
+                                                            "textchannel",
+                                                            textChannel.textChannelId,
+                                                        ]);
+                                                    }}
+                                                >
+                                                    <FaHashtag size={15} />
+                                                    <span>
+                                                        {
+                                                            textChannel.textChannelName
+                                                        }
+                                                    </span>
+                                                </div>
+                                                <Popover>
+                                                    <PopoverTrigger>
+                                                        <HiDotsVertical
+                                                            size={15}
+                                                            className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
+                                                        />
+                                                    </PopoverTrigger>
+                                                    <PopoverContent
+                                                        className={cn(
+                                                            "dark:text-white text-sm font-sans antialiased w-40",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        <span
+                                                            onClick={() => {
+                                                                setEditingTextChannel(
+                                                                    textChannel.textChannelId
+                                                                );
+                                                                setEditingTextChannelInput(
+                                                                    textChannel.textChannelName
+                                                                );
+                                                            }}
+                                                            className={cn(
+                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-black dark:text-white text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            Edit Channel
+                                                        </span>
+                                                        <span
+                                                            onClick={() => {
+                                                                setDeletingTextChannel(
+                                                                    textChannel.textChannelId
+                                                                );
+                                                            }}
+                                                            className={cn(
+                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-red-500 text-sm font-bold font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            Delete Channel
+                                                        </span>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            </div>
+                                        )
+                                )}
+                            </AccordionContent>
+                        </AccordionItem>
+                        <AccordionItem value="voice-channels">
+                            <div className="w-full flex items-center justify-between text-sm">
+                                <AccordionTrigger className="w-56 hover:text-slate-400 dark:hover:brightness-90">
+                                    VOICE CHANNELS
+                                </AccordionTrigger>
+                                {(user.uid === serverNavigationData.ownerUid ||
+                                    serverNavigationData.adminList.includes(
+                                        user.uid
+                                    )) && (
+                                    <FaPlus
+                                        size={12}
+                                        onClick={() =>
+                                            setAddingVoiceChannel(true)
+                                        }
+                                        className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
+                                    />
+                                )}
+                            </div>
+                            <AccordionContent className="flex flex-col items-start justify-center gap-1 w-full">
+                                {serverNavigationData.voiceChannels.map(
+                                    (voiceChannel) =>
+                                        voiceChannel && (
+                                            <div
+                                                key={
+                                                    voiceChannel.voiceChannelId
+                                                }
+                                                className={cn(
+                                                    "flex w-full h-8 cursor-pointer items-center justify-between px-2 rounded-xl dark:hover:bg-slate-800 hover:bg-slate-300",
+                                                    selectedChannel[0] ===
+                                                        "voicechannel" &&
+                                                        selectedChannel[1] ===
+                                                            voiceChannel.voiceChannelId
+                                                        ? "dark:bg-slate-800 bg-slate-300"
+                                                        : null
+                                                )}
+                                            >
+                                                <div
+                                                    className="w-full flex items-center gap-1 justify-start"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation(); // Prevent event bubbling
+                                                        console.log(
+                                                            "VOICE CHANNEL CLICK!"
+                                                        );
+                                                        setSelectedChannel([
+                                                            "voicechannel",
+                                                            voiceChannel.voiceChannelId,
+                                                        ]);
+                                                        setServerContent([
+                                                            "voicechannel",
+                                                            voiceChannel.voiceChannelId,
+                                                        ]);
+                                                    }}
+                                                >
+                                                    <HiSpeakerWave size={15} />
                                                     {
-                                                        textChannel.textChannelName
+                                                        voiceChannel.voiceChannelName
                                                     }
-                                                </span>
+                                                </div>
+                                                <Popover>
+                                                    <PopoverTrigger>
+                                                        <HiDotsVertical
+                                                            size={15}
+                                                            className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
+                                                        />
+                                                    </PopoverTrigger>
+                                                    <PopoverContent
+                                                        className={cn(
+                                                            "dark:text-white text-sm font-sans antialiased w-40",
+                                                            fontSans.variable
+                                                        )}
+                                                    >
+                                                        <span
+                                                            onClick={() => {
+                                                                setEditingVoiceChannel(
+                                                                    voiceChannel.voiceChannelId
+                                                                );
+                                                                setEditingVoiceChannelInput(
+                                                                    voiceChannel.voiceChannelName
+                                                                );
+                                                            }}
+                                                            className={cn(
+                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-black dark:text-white text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            Edit Channel
+                                                        </span>
+                                                        <span
+                                                            onClick={() => {
+                                                                setDeletingVoiceChannel(
+                                                                    voiceChannel.voiceChannelId
+                                                                );
+                                                            }}
+                                                            className={cn(
+                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-red-500 text-sm font-bold font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                fontSans.variable
+                                                            )}
+                                                        >
+                                                            Delete Channel
+                                                        </span>
+                                                    </PopoverContent>
+                                                </Popover>
                                             </div>
-                                            <HiDotsVertical
-                                                size={15}
-                                                className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
-                                            />
-                                        </div>
-                                    )
-                            )}
-                        </AccordionContent>
-                    </AccordionItem>
-                    <AccordionItem value="voice-channels">
-                        <div className="w-full flex items-center justify-between text-sm">
-                            <AccordionTrigger className="w-60 hover:text-slate-400 dark:hover:brightness-90">
-                                VOICE CHANNELS
-                            </AccordionTrigger>
-                            {(user.uid === serverNavigationData.ownerUid ||
-                                serverNavigationData.adminList.includes(
-                                    user.uid
-                                )) && (
-                                <FaPlus
-                                    size={12}
-                                    onClick={() => setAddingVoiceChannel(true)}
-                                    className="cursor-pointer hover:text-slate-400 dark:hover:brightness-90"
-                                />
-                            )}
-                        </div>
-                        <AccordionContent className="flex flex-col items-start justify-center gap-1 w-full">
-                            {serverNavigationData.voiceChannels.map(
-                                (voiceChannel) =>
-                                    voiceChannel && (
-                                        <div
-                                            key={voiceChannel.voiceChannelId}
-                                            className={cn(
-                                                "flex w-full h-8 cursor-pointer items-center justify-between px-2 rounded-xl dark:hover:bg-slate-800 hover:bg-slate-300",
-                                                selectedChannel[0] ===
-                                                    "voicechannel" &&
-                                                    selectedChannel[1] ===
-                                                        voiceChannel.voiceChannelId
-                                                    ? "dark:bg-slate-800 bg-slate-300"
-                                                    : null
-                                            )}
-                                            onClick={(e) => {
-                                                e.stopPropagation(); // Prevent event bubbling
-                                                console.log(
-                                                    "VOICE CHANNEL CLICK!"
-                                                );
-                                                setSelectedChannel([
-                                                    "voicechannel",
-                                                    voiceChannel.voiceChannelId,
-                                                ]);
-                                                setServerContent([
-                                                    "voicechannel",
-                                                    voiceChannel.voiceChannelId,
-                                                ]);
-                                            }}
-                                        >
-                                            <div className="w-full flex items-center gap-1 justify-start">
-                                                <HiSpeakerWave size={15} />
-                                                {voiceChannel.voiceChannelName}
-                                            </div>
-                                            <HiDotsVertical
-                                                size={15}
-                                                className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
-                                            />
-                                        </div>
-                                    )
-                            )}
-                        </AccordionContent>
-                    </AccordionItem>
-                </Accordion>
+                                        )
+                                )}
+                            </AccordionContent>
+                        </AccordionItem>
+                    </Accordion>
+                </ScrollArea>
             </div>
         </>
     ) : (
@@ -1231,8 +1732,8 @@ const UserInfo = ({ isOwner, isAdmin, userUid, serverId }) => {
 
     return (
         userData && (
-            <div className="flex w-56 min-h-12 items-center justify-start">
-                <div className="w-56 h-16 flex items-center justify-start gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl px-2">
+            <div className="flex min-w-56 min-h-12 items-center justify-start">
+                <div className="min-w-56 h-16 flex items-center justify-start gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl px-2">
                     <Avatar className="bg-white">
                         <AvatarImage src={userData[3]} />
                         <AvatarFallback>{}</AvatarFallback>
@@ -1299,7 +1800,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         fileName: string | null;
         messageId: string | null;
         edited: boolean;
-        mentions: Array<string>;
+        mentions: any;
     }
 
     interface ServerContentData {
@@ -1313,6 +1814,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     const [messages, setMessages] = useState<Message[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [userData, setUserData] = useState<Record<string, any>>({});
+    const [nicknames, setNicknames] = useState<Record<string, string>>({});
     const [serverContentData, setServerContentData] =
         useState<ServerContentData>(null);
     const [inputValue, setInputValue] = useState("");
@@ -1330,6 +1832,88 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     const [mentionOpen, setMentionOpen] = useState(false);
     const [currentMentionIndex, setCurrentMentionIndex] = useState(null);
     const [mentionedUids, setMentionedUids] = useState([]);
+
+    const [isDropzoneVisible, setDropzoneVisible] = useState(false);
+    const dragCounter = useRef(0);
+
+    useEffect(() => {
+        const handleDragEnter = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current++;
+            setDropzoneVisible(true);
+        };
+
+        const handleDragLeave = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current--;
+            if (dragCounter.current === 0) {
+                setDropzoneVisible(false);
+            }
+        };
+
+        const handleDrop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current = 0;
+            setDropzoneVisible(false);
+        };
+
+        window.addEventListener("dragenter", handleDragEnter);
+        window.addEventListener("dragleave", handleDragLeave);
+        window.addEventListener("drop", handleDrop);
+
+        return () => {
+            window.removeEventListener("dragenter", handleDragEnter);
+            window.removeEventListener("dragleave", handleDragLeave);
+            window.removeEventListener("drop", handleDrop);
+        };
+    }, []);
+
+    const { getRootProps, isDragActive } = useDropzone({
+        noClick: true,
+        onDrop: (acceptedFiles) => {
+            console.log(acceptedFiles);
+            acceptedFiles.forEach(async (file) => {
+                const storageRef = storage.ref();
+                const fileRef = storageRef.child(
+                    `servers/messages/${serverId}/${serverContent[1]}/${file.name}`
+                );
+
+                const isImage = file.type.startsWith("image/");
+                const isVideo = file.type.startsWith("video/");
+
+                await fileRef.put(file);
+                const fileUrl = await fileRef.getDownloadURL();
+
+                const newMessage = {
+                    senderUid: user.uid,
+                    isFileType: true,
+                    isImageType: isImage,
+                    isVideoType: isVideo,
+                    text: null,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    messageId: null,
+                    file: fileUrl,
+                    fileName: file.name,
+                    edited: false,
+                };
+
+                const newMessageDocRef = await firestore
+                    .collection("servers")
+                    .doc(serverId)
+                    .collection("textChannels")
+                    .doc(serverContent[1])
+                    .collection("messages")
+                    .add(newMessage);
+
+                await newMessageDocRef.update({
+                    messageId: newMessageDocRef.id,
+                });
+            });
+        },
+    });
 
     const Filter = require("bad-words");
     const filter = new Filter();
@@ -1356,26 +1940,30 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 if (userDoc.exists) {
                     const userData = userDoc.data();
 
-                    const nicknameDoc = await firestore
+                    await firestore
                         .collection("users")
                         .doc(uid)
                         .collection("nicknames")
                         .doc(serverId)
-                        .get();
+                        .onSnapshot((snapshot) => {
+                            let nicknameList = nicknames;
 
-                    let nickname;
+                            if (snapshot.exists) {
+                                console.log("NICKNAME EXISTS");
 
-                    if (nicknameDoc.exists) {
-                        console.log("NICKNAME EXISTS");
-                        nickname = nicknameDoc.data().nickname;
-                    } else {
-                        console.log("NICKNAME DOESN'T EXIST");
-                        nickname = null;
-                    }
+                                if (nicknameList[uid]) {
+                                    nicknameList[uid] =
+                                        snapshot.data().nickname;
+                                } else {
+                                    nicknameList = {
+                                        ...nicknameList,
+                                        [uid]: snapshot.data().nickname,
+                                    };
+                                }
 
-                    userData.nickname = nickname;
-
-                    console.log("NICKNAME", nickname);
+                                setNicknames(nicknameList);
+                            }
+                        });
 
                     setUserData((prevData) => ({
                         ...prevData,
@@ -1512,18 +2100,30 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             setMentionOpen(false);
             const verifiedMentions = validateMentions(inputValue);
 
+            // Transform mentions in inputValue to UIDs
+            let transformedMessage = inputValue;
+            verifiedMentions.forEach(({ mentionText, uid }) => {
+                console.log(mentionText, uid);
+                transformedMessage = transformedMessage.replace(
+                    `@${mentionText}`,
+                    `@${uid}`
+                );
+            });
+
             const newMessage = {
                 senderUid: user.uid,
                 isFileType: false,
                 isImageType: false,
                 isVideoType: false,
-                text: inputValue,
+                text: transformedMessage,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 file: null,
                 fileName: null,
                 edited: false,
-                mentions: verifiedMentions,
+                mentions: verifiedMentions[0] ? verifiedMentions : [],
             };
+
+            console.log(newMessage);
 
             // Add the new message to the conversation's "messages" collection
             const newMessageDocRef = await firestore
@@ -1580,7 +2180,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         const mentionIndex = currentMentionIndex;
         const newValue =
             value.slice(0, mentionIndex + 1) +
-            username +
+            (nicknames[uid] || username) +
             " " +
             value.slice(mentionIndex + 1);
         setInputValue(newValue);
@@ -1592,30 +2192,41 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     };
 
     const validateMentions = (text) => {
-        const mentionRegex = /@(\w+)/g;
+        const mentionRegex = /@([^\s@]+(?:\s[^\s@]+)*)/g;
         const mentions = [];
         const verifiedMentions = [];
         let match;
 
         while ((match = mentionRegex.exec(text)) !== null) {
-            const mentionText = match[1];
+            const mentionText = match[1].trim();
             let user;
+            let uid;
+
+            console.log("text: ", text);
+            console.log("mention text: ", mentionText);
 
             // Check if the mention matches any user's nickname first
-            user = Object.values(userData).find(
-                (user) => user.nickname === mentionText
+            const nicknameEntry = Object.entries(nicknames).find(
+                ([key, nickname]) => nickname === mentionText
             );
 
-            // If no nickname matches, check the username
-            if (!user) {
+            if (nicknameEntry) {
+                [uid, user] = nicknameEntry;
+                user = { uid }; // Create a user object with uid
+            } else {
+                // If no nickname matches, check the username
                 user = Object.values(userData).find(
-                    (user) => !user.nickname && user.username === mentionText
+                    (user) => user.username === mentionText
                 );
+                if (user) {
+                    uid = user.uid;
+                }
             }
 
             if (user) {
-                mentions.push({ mentionText, uid: user.uid });
-                verifiedMentions.push(user.uid);
+                mentions.push({ mentionText, uid });
+                verifiedMentions.push(uid);
+                console.log(mentions);
             } else {
                 console.error(`Invalid mention: @${mentionText}`);
             }
@@ -1633,7 +2244,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             }
         });
 
-        return verifiedMentions;
+        return mentions;
     };
 
     const handleEditMessageClick = (messageId, messageText) => {
@@ -1727,91 +2338,60 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     };
 
     const renderMessageWithMentions = (message) => {
-        const mentionRegex = /@(\w+)/g;
+        const messageParts = message.text.split(/(@\S+)/); // Split message into parts by whitespace
         const validMentions = message.mentions; // List of valid mentioned UIDs from the message
-
-        let lastIndex = 0;
-        const parts = [];
-
-        message.text.replace(mentionRegex, (match, p1, offset) => {
-            // Add text before the mention
-            if (lastIndex < offset) {
-                parts.push({
-                    text: message.text.slice(lastIndex, offset),
-                    isMention: false,
-                });
-            }
-
-            // Add the mention
-            parts.push({
-                text: p1,
-                isMention: true,
-            });
-
-            lastIndex = offset + match.length;
-        });
-
-        // Add remaining text after the last mention
-        if (lastIndex < message.text.length) {
-            parts.push({
-                text: message.text.slice(lastIndex),
-                isMention: false,
-            });
-        }
-
-        console.log("Parts:", parts);
-
-        return parts.map((part, index) => {
-            if (part.isMention) {
-                const isValidMention = validMentions.some((uid) => {
-                    const user = userData[uid];
+    
+        return messageParts.map((part, index) => {
+            const mentionUid = part.startsWith('@') ? part.slice(1) : part;
+    
+            // Check if mentionUid exists in validMentions array
+            const isValidMention = validMentions.some((mention) => mention.uid === mentionUid);
+            console.log(isValidMention);
+    
+            if (isValidMention) {
+                // If part is a valid mention UID, replace with nickname or username
+                const user = userData[mentionUid];
+                if (user) {
+                    const mentionText = nicknames[mentionUid] || user.username;
                     return (
-                        user &&
-                        (user.nickname === part.text ||
-                            user.username === part.text)
-                    );
-                });
-
-                console.log(`Mention: ${part.text}, Valid: ${isValidMention}`);
-
-                if (isValidMention) {
-                    return (
-                        <Popover>
+                        <Popover key={index}>
                             <PopoverTrigger>
                                 <span
-                                    key={index}
                                     className="shadow-md px-2 rounded-xl bg-indigo-500 hover:bg-indigo-400 cursor-pointer font-bold text-white"
                                 >
-                                    @{part.text}
+                                    @{mentionText}
                                 </span>
                             </PopoverTrigger>
                             <PopoverContent
                                 sideOffset={10}
-                                className="w-min h-min bg-slate-300 dark:bg-slate-900 border-slate-500"
+                                className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
                             >
                                 <UserProfilePopup
-                                    serverId={null}
-                                    userUid={message.senderUid}
-                                ></UserProfilePopup>
+                                    serverId={serverId}
+                                    userUid={mentionUid}
+                                />
                             </PopoverContent>
                         </Popover>
                     );
                 } else {
-                    return <span key={index}>@{part.text}</span>;
+                    return <span key={index}>@{mentionUid}</span>; // Fallback to UID if user not found
                 }
             } else {
                 // Ensure part.text is a string
-                const textToClean = part.text ?? "";
-                console.log("Text to clean:", textToClean);
+                const textToClean = part ?? "";
                 try {
-                    return <span key={index}>{filter.clean(textToClean)}</span>;
+                    return (
+                        <span key={index}>
+                            {filter.clean(textToClean)}
+                        </span>
+                    );
                 } catch (error) {
-                    console.error("Error cleaning text:", textToClean, error);
+                    console.log("Cancelled cleaning text:", textToClean, error);
                     return <span key={index}>{textToClean}</span>;
                 }
             }
         });
-    };
+    };    
 
     return (
         <div className="relative h-full w-full bg-slate-200 dark:bg-slate-900 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar">
@@ -1852,6 +2432,17 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             )}
             {serverContent[0] === "textchannel" && messages && (
                 <>
+                    {isDropzoneVisible && (
+                        <div
+                            {...getRootProps({
+                                className: `fixed w-full h-screen z-20 pointer-events-auto`,
+                            })}
+                        >
+                            {isDragActive && (
+                                <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-slate-600 dark:bg-opacity-30 bg-opacity-50"></div>
+                            )}
+                        </div>
+                    )}
                     <div
                         className="relative min-h-full w-full flex flex-col items-start justify-end p-4 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar"
                         style={{
@@ -1867,10 +2458,10 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                 <div
                                     key={index}
                                     className={cn(
-                                        "flex items-start justify-start gap-4 w-full min-h-16 p-1 ",
-                                        message.mentions.includes(user.uid)
+                                        "flex items-start justify-start gap-4 w-full min-h-16 p-1 my-1",
+                                        message.mentions.some((mention) => mention.uid === user.uid)
                                             ? "bg-violet-200 dark:bg-violet-950 rounded-xl shadow-sm"
-                                            : ""
+                                                : ""
                                     )}
                                 >
                                     <Popover>
@@ -1888,10 +2479,10 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                         </PopoverTrigger>
                                         <PopoverContent
                                             sideOffset={10}
-                                            className="w-min h-min bg-slate-300 dark:bg-slate-900 border-slate-500"
+                                            className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
                                         >
                                             <UserProfilePopup
-                                                serverId={null}
+                                                serverId={serverId}
                                                 userUid={message.senderUid}
                                             ></UserProfilePopup>
                                         </PopoverContent>
@@ -1900,8 +2491,9 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                         <div className="flex items-center justify-center gap-1">
                                             <span className="font-bold text-black dark:text-white">
                                                 {senderData
-                                                    ? senderData.nickname ||
-                                                      senderData.username
+                                                    ? nicknames[
+                                                          message.senderUid
+                                                      ] || senderData.username
                                                     : "Loading..."}
                                             </span>
                                             <span className="text-black dark:text-white text-[11px]">
@@ -2032,11 +2624,13 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                             </div>
                                                         </div>
                                                     )}
-                                                <div className="message-body">
-                                                    {renderMessageWithMentions(
-                                                        message
-                                                    )}
-                                                </div>
+                                                {message.text && (
+                                                    <div className="message-body">
+                                                        {renderMessageWithMentions(
+                                                            message
+                                                        )}
+                                                    </div>
+                                                )}
                                                 {message.edited && (
                                                     <div className="text-[10px]">
                                                         (edited)
@@ -2289,8 +2883,318 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
 };
 
 const ServerDashboardInfo = ({ serverId }) => {
+    interface ServerInfoData {
+        ownerUid: string;
+        adminList: Array<string>;
+        memberList: Array<string>;
+    }
+
+    const [serverInfoData, setServerInfoData] = useState<ServerInfoData>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const getServerNavigationData = () => {
+            let data: ServerInfoData = {
+                ownerUid: "",
+                adminList: [],
+                memberList: [],
+            };
+
+            const serverRef = firestore.collection("servers").doc(serverId);
+
+            const unsubscribeServerData = serverRef.onSnapshot((snapshot) => {
+                data.ownerUid = snapshot.data().ownerUid;
+                const admins = [];
+                const members = [];
+
+                snapshot.data().adminList.forEach((admin) => {
+                    admins.push(admin);
+                });
+
+                snapshot.data().memberList.forEach((member) => {
+                    members.push(member);
+                });
+
+                data.adminList = admins;
+                data.memberList = members;
+
+                setServerInfoData({ ...data });
+                setLoading(false);
+            });
+
+            return () => {
+                unsubscribeServerData();
+            };
+        };
+
+        const unsubscribe = getServerNavigationData();
+
+        return () => {
+            unsubscribe();
+        };
+    }, [serverId]);
+
     return (
-        <div className="z-10 h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2"></div>
+        !loading && (
+            <div className="flex gap-1 z-50 h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-start pt-2">
+                <ScrollArea className="w-[300px] h-full">
+                    <div className="w-full flex justify-start items-center pl-6 text-sm font-bold py-2">
+                        OWNER
+                    </div>
+                    <Popover>
+                        <PopoverTrigger>
+                            <div className="min-w-72 flex items-center justify-center">
+                                <ServerInfoUserItem
+                                    isAdmin={false}
+                                    isOwner={true}
+                                    key={serverInfoData.ownerUid}
+                                    serverId={serverId}
+                                    userUid={serverInfoData.ownerUid}
+                                />
+                            </div>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500">
+                            <UserProfilePopup
+                                serverId={serverId}
+                                userUid={serverInfoData.ownerUid}
+                            ></UserProfilePopup>
+                        </PopoverContent>
+                    </Popover>
+                    <div className="w-full flex justify-start items-center pl-6 text-sm font-bold py-2">
+                        ADMINS
+                    </div>
+                    <div className="min-h-12">
+                        {serverInfoData.adminList.map((admin) => (
+                            <Popover>
+                                <PopoverTrigger>
+                                    <div className="min-w-72 flex items-center justify-center">
+                                        <ServerInfoUserItem
+                                            isAdmin={true}
+                                            isOwner={false}
+                                            key={admin}
+                                            serverId={serverId}
+                                            userUid={admin}
+                                        />
+                                    </div>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500">
+                                    <UserProfilePopup
+                                        serverId={serverId}
+                                        userUid={admin}
+                                    ></UserProfilePopup>
+                                </PopoverContent>
+                            </Popover>
+                        ))}
+                        {serverInfoData.adminList.length === 0 && (
+                            <div className="w-full h-12 flex items-center justify-center text-sm">
+                                No Admins
+                            </div>
+                        )}
+                    </div>
+                    <div className="w-full flex justify-start items-center pl-6 text-sm font-bold py-2">
+                        MEMBERS
+                    </div>
+                    <div className="min-h-12">
+                        {serverInfoData.memberList.map((member) => {
+                            if (
+                                !serverInfoData.adminList.includes(member) &&
+                                member !== serverInfoData.ownerUid
+                            )
+                                return (
+                                    <Popover>
+                                        <PopoverTrigger>
+                                            <div className="min-w-72 flex items-center justify-center">
+                                                <ServerInfoUserItem
+                                                    isAdmin={false}
+                                                    isOwner={false}
+                                                    key={member}
+                                                    serverId={serverId}
+                                                    userUid={member}
+                                                />
+                                            </div>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500">
+                                            <UserProfilePopup
+                                                serverId={serverId}
+                                                userUid={member}
+                                            ></UserProfilePopup>
+                                        </PopoverContent>
+                                    </Popover>
+                                );
+                        })}
+                        {serverInfoData.memberList.length -
+                            serverInfoData.adminList.length -
+                            1 ===
+                            0 && (
+                            <div className="w-full h-12 flex items-center justify-center text-sm">
+                                No Members
+                            </div>
+                        )}
+                    </div>
+                </ScrollArea>
+            </div>
+        )
+    );
+};
+
+const ServerInfoUserItem = ({ isOwner, isAdmin, userUid, serverId }) => {
+    const [userData, setUserData] = useState(null);
+    const [userRealtimeStatus, setUserRealtimeStatus] = useState(null);
+    const [nickname, setNickname] = useState(null);
+    const nameRef = useRef(null);
+    const statusRef = useRef(null);
+
+    let scrollInterval;
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const startScrolling = (element) => {
+        scrollInterval = setInterval(async () => {
+            if (
+                element.scrollLeft <
+                element.scrollWidth - element.clientWidth
+            ) {
+                await delay(2000);
+                element.scrollLeft += 1;
+            } else {
+                await delay(2000);
+                element.scrollLeft = 0;
+            }
+        }, 50);
+    };
+
+    const stopScrolling = () => {
+        clearInterval(scrollInterval);
+    };
+
+    useEffect(() => {
+        if (nameRef.current) {
+            startScrolling(nameRef.current);
+        }
+
+        if (statusRef.current) {
+            startScrolling(statusRef.current);
+        }
+
+        return () => {
+            stopScrolling();
+        };
+    }, []);
+
+    useEffect(() => {
+        const getUserRealTimeStatus = async () => {
+            const userStatusDatabaseRef = database.ref(
+                `userState/${userUid}/status`
+            );
+
+            const handleStatusUpdate = (snapshot) => {
+                if (snapshot.exists()) {
+                    if (snapshot.val() === "online") {
+                        setUserRealtimeStatus("Online");
+                    } else {
+                        setUserRealtimeStatus("Offline");
+                    }
+                } else {
+                    setUserRealtimeStatus("Offline");
+                }
+            };
+
+            userStatusDatabaseRef.on("value", handleStatusUpdate);
+
+            return () => {
+                userStatusDatabaseRef.off("value", handleStatusUpdate);
+            };
+        };
+
+        const usersRef = firestore.collection("users");
+
+        const getUserData = async () => {
+            const userDoc = usersRef.doc(userUid).onSnapshot((snapshot) => {
+                setUserData([
+                    snapshot.data().username,
+                    snapshot.data().tag,
+                    snapshot.data().customStatus,
+                    snapshot.data().profilePicture,
+                ]);
+            });
+
+            const nicknameDoc = await firestore
+                .collection("users")
+                .doc(userUid)
+                .collection("nicknames")
+                .doc(serverId)
+                .onSnapshot((snapshot) => {
+                    let nickname;
+
+                    if (snapshot.exists) {
+                        console.log("NICKNAME EXISTS");
+                        nickname = snapshot.data().nickname;
+                    } else {
+                        console.log("NICKNAME DOESN'T EXIST");
+                        nickname = null;
+                    }
+
+                    setNickname(nickname);
+                    console.log(nickname);
+                });
+        };
+
+        getUserData();
+        getUserRealTimeStatus();
+    }, [serverId]);
+
+    return (
+        userData && (
+            <div className="flex w-full min-h-12 items-center justify-start mx-4 px-2 py-2 gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl">
+                <Avatar className="bg-white">
+                    <AvatarImage src={userData[3]} />
+                    <AvatarFallback>{}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col justify-center items-start text-black dark:text-white">
+                    <span
+                        ref={nameRef}
+                        className={cn(
+                            "font-semibold max-w-36 overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar text-base",
+                            isOwner
+                                ? "text-red-600"
+                                : isAdmin
+                                ? "text-orange-400"
+                                : ""
+                        )}
+                        onMouseEnter={() => clearInterval(scrollInterval)}
+                        onMouseLeave={() => {
+                            if (nameRef.current) {
+                                startScrolling(nameRef.current);
+                            }
+                        }}
+                    >
+                        {nickname || userData[0]}
+                    </span>
+                    <span
+                        ref={statusRef}
+                        className="text-sm text-slate-600 dark:text-slate-400 max-w-36 overflow-x-auto no-scrollbar no-scrollbar::-webkit-scrollbar whitespace-nowrap"
+                        onMouseEnter={() => clearInterval(scrollInterval)}
+                        onMouseLeave={() => {
+                            if (statusRef.current) {
+                                startScrolling(statusRef.current);
+                            }
+                        }}
+                    >
+                        {userRealtimeStatus === "Offline"
+                            ? userRealtimeStatus
+                            : userData[2] || userRealtimeStatus}
+                    </span>
+                </div>
+                {isOwner && (
+                    <PiCrownSimpleFill
+                        className="absolute right-10"
+                        size={20}
+                    />
+                )}
+                {isAdmin && (
+                    <RiAdminFill className="absolute right-10" size={20} />
+                )}
+            </div>
+        )
     );
 };
 

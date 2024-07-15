@@ -14,6 +14,7 @@ import { FaUserFriends } from "react-icons/fa";
 import { MdCall, MdCallEnd, MdEmojiEmotions } from "react-icons/md";
 
 import EmojiPicker from "emoji-picker-react";
+import { useDropzone } from "react-dropzone";
 
 import {
     Popover,
@@ -71,7 +72,7 @@ const Dashboard = ({
     return (
         <>
             <div className="flex w-full h-screen pl-20 pt-14">
-                <DashboardNavigation setContent={setContent} />
+                <DashboardNavigation setContent={setContent} inCall={inCall} />
                 <DashboardContent
                     content={content}
                     inCall={inCall}
@@ -101,7 +102,7 @@ const Dashboard = ({
     );
 };
 
-const DashboardNavigation = ({ setContent }) => {
+const DashboardNavigation = ({ setContent, inCall }) => {
     const [loading, setLoading] = useState(true);
     const auth = firebase.auth() as unknown as Auth;
     const [user] = useAuthState(auth);
@@ -111,6 +112,10 @@ const DashboardNavigation = ({ setContent }) => {
     const [selectedConversation, setSelectedConversation] = useState(null);
     const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
     const [isFriendMenuOpen, setIsFriendMenuOpen] = useState(false);
+    const [deletingConversation, setDeletingConversation] = useState<
+        boolean | string
+    >(false);
+    const [conversationSearchInput, setConversationSearchInput] = useState("");
 
     const [toastMessage, setToastMessage] = useState("");
     const { toast } = useToast();
@@ -236,6 +241,91 @@ const DashboardNavigation = ({ setContent }) => {
         }
     }, [toastMessage, toast]);
 
+    const handleDeleteConversation = async () => {
+        if (inCall) {
+            setToastMessage("Error! You are still in a call!");
+            return;
+        }
+
+        const conversationDoc = await firestore
+            .collection("conversations")
+            .where("userIds", "array-contains", user.uid)
+            .get();
+
+        let conversationId = "";
+
+        conversationDoc.forEach((doc) => {
+            if (doc.data().userIds.includes(deletingConversation)) {
+                doc.ref.delete();
+                conversationId = doc.ref.id;
+                return;
+            }
+        });
+
+        console.log("firestore deletion conversation: ");
+
+        const listRef = storage.ref().child(`messages/${conversationId}/`);
+
+        // List all files in the folder and delete them
+        listRef
+            .listAll()
+            .then(async (result) => {
+                // Delete each file in the folder
+                const deletePromises = result.items.map((fileRef) =>
+                    fileRef.delete()
+                );
+
+                // Wait for all delete promises to resolve
+                await Promise.all(deletePromises);
+
+                // Now check if there are any remaining sub-folders and delete them
+                const deleteFolderPromises = result.prefixes.map((folderRef) =>
+                    handleDeleteSubFolder(folderRef)
+                );
+                await Promise.all(deleteFolderPromises);
+
+                console.log(
+                    `All files in the folder messages/${conversationId}/ have been deleted`
+                );
+            })
+            .catch((error) => {
+                console.error("Error listing files:", error);
+            });
+
+        setToastMessage("Successfully deleted conversation!");
+        setSelectedConversation(null);
+        setContent(["welcome", null]);
+        setDeletingConversation(false);
+    };
+
+    // Recursive function to delete files within sub-folders
+    const handleDeleteSubFolder = async (folderRef) => {
+        return folderRef
+            .listAll()
+            .then(async (result) => {
+                // Delete each file in the sub-folder
+                const deletePromises = result.items.map((fileRef) =>
+                    fileRef.delete()
+                );
+
+                // Wait for all delete promises to resolve
+                await Promise.all(deletePromises);
+
+                // Recursively delete any sub-folders
+                const deleteFolderPromises = result.prefixes.map(
+                    (subFolderRef) => handleDeleteSubFolder(subFolderRef)
+                );
+                await Promise.all(deleteFolderPromises);
+
+                console.log(
+                    `All files in the folder ${folderRef.fullPath} have been deleted`
+                );
+            })
+            .catch((error) => {
+                console.error("Error listing files in sub-folder:", error);
+            });
+    };
+    
     return (
         <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2">
             <Toaster />
@@ -337,6 +427,15 @@ const DashboardNavigation = ({ setContent }) => {
                         </DialogHeader>
                     </DialogContent>
                 </Dialog>
+                <Input
+                    onChange={(e) => setConversationSearchInput(e.target.value)}
+                    placeholder="Search Conversations"
+                    className={cn(
+                        "dark:text-white text-sm w-60 font-sans antialiased p-4 mt-2 rounded-2xl bg-slate-300 dark:bg-slate-800",
+                        fontSans.variable
+                    )}
+                    type="text"
+                ></Input>
                 <div className="flex flex-col w-full gap-1">
                     {loading && (
                         <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center gap-4 mt-10">
@@ -349,15 +448,86 @@ const DashboardNavigation = ({ setContent }) => {
                     )}
                     {!loading &&
                         userConversationIds.map((id) => (
-                            <ConversationNavigationItem
-                                key={id}
-                                setContent={setContent}
-                                userUid={id}
-                                selected={selectedConversation === id}
-                                setSelected={setSelectedConversation}
-                            ></ConversationNavigationItem>
+                            <ContextMenu key={id}>
+                                <ContextMenuTrigger>
+                                    <ConversationNavigationItem
+                                        key={id}
+                                        setContent={setContent}
+                                        userUid={id}
+                                        selected={selectedConversation === id}
+                                        setSelected={setSelectedConversation}
+                                        searchInput={conversationSearchInput}
+                                    ></ConversationNavigationItem>
+                                </ContextMenuTrigger>
+                                <ContextMenuContent
+                                    className={cn(
+                                        "dark:text-white text-sm font-sans antialiased",
+                                        fontSans.variable
+                                    )}
+                                >
+                                    <ContextMenuItem
+                                        onClick={() => {
+                                            setDeletingConversation(id);
+                                            console.log(
+                                                "Conversation Deletion ID Set"
+                                            );
+                                        }}
+                                    >
+                                        <span className="text-red-600 font-bold cursor-pointer">
+                                            Delete Conversation
+                                        </span>
+                                    </ContextMenuItem>
+                                </ContextMenuContent>
+                            </ContextMenu>
                         ))}
                 </div>
+                <Dialog
+                    open={deletingConversation !== false}
+                    onOpenChange={setDeletingConversation}
+                >
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle
+                                className={cn(
+                                    "dark:text-white text-xl font-sans antialiased",
+                                    fontSans.variable
+                                )}
+                            >
+                                Delete Conversation
+                            </DialogTitle>
+                            <DialogDescription
+                                className={cn(
+                                    "dark:text-white text-[16px] font-sans antialiased flex flex-col gap-4",
+                                    fontSans.variable
+                                )}
+                            >
+                                <div>
+                                    This will wipe all messages and files in the
+                                    conversation and it cannot be undone! Are
+                                    you sure?
+                                </div>
+                                <div className="flex items-center justify-end w-full gap-4">
+                                    <Button
+                                        className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                        onClick={() => {
+                                            handleDeleteConversation();
+                                        }}
+                                    >
+                                        Confirm Deletion
+                                    </Button>
+                                    <Button
+                                        onClick={() =>
+                                            setDeletingConversation(false)
+                                        }
+                                        className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                    >
+                                        Cancel
+                                    </Button>
+                                </div>
+                            </DialogDescription>
+                        </DialogHeader>
+                    </DialogContent>
+                </Dialog>
             </div>
         </div>
     );
@@ -368,6 +538,7 @@ const ConversationNavigationItem = ({
     userUid,
     selected,
     setSelected,
+    searchInput
 }) => {
     const [userData, setUserData] = useState(null);
     const [userRealtimeStatus, setUserRealtimeStatus] = useState(null);
@@ -421,7 +592,7 @@ const ConversationNavigationItem = ({
 
     return (
         <>
-            {userData && (
+            {userData && userData[0].toLowerCase().includes(searchInput.toLowerCase()) && (
                 <div
                     className={cn(
                         "flex w-full min-h-12 items-center justify-start px-2 py-2 gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl",
@@ -510,8 +681,87 @@ const DashboardContent = ({
         false,
         "",
     ]);
+    const [isDropzoneVisible, setDropzoneVisible] = useState(false);
+    const dragCounter = useRef(0);
 
-    const Filter = require("bad-words")
+    useEffect(() => {
+        const handleDragEnter = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current++;
+            setDropzoneVisible(true);
+        };
+
+        const handleDragLeave = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current--;
+            if (dragCounter.current === 0) {
+                setDropzoneVisible(false);
+            }
+        };
+
+        const handleDrop = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dragCounter.current = 0;
+            setDropzoneVisible(false);
+        };
+
+        window.addEventListener("dragenter", handleDragEnter);
+        window.addEventListener("dragleave", handleDragLeave);
+        window.addEventListener("drop", handleDrop);
+
+        return () => {
+            window.removeEventListener("dragenter", handleDragEnter);
+            window.removeEventListener("dragleave", handleDragLeave);
+            window.removeEventListener("drop", handleDrop);
+        };
+    }, []);
+
+    const { getRootProps, isDragActive } = useDropzone({
+        noClick: true,
+        onDrop: (acceptedFiles) => {
+            console.log(acceptedFiles);
+            acceptedFiles.forEach(async (file) => {
+                const storageRef = storage.ref();
+                const fileRef = storageRef.child(
+                    `messages/${conversationId}/${file.name}`
+                );
+
+                const isImage = file.type.startsWith("image/");
+                const isVideo = file.type.startsWith("video/");
+
+                await fileRef.put(file);
+                const fileUrl = await fileRef.getDownloadURL();
+
+                const newMessage = {
+                    senderUid: user.uid,
+                    isFileType: true,
+                    isImageType: isImage,
+                    isVideoType: isVideo,
+                    text: null,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    messageId: null,
+                    file: fileUrl,
+                    fileName: file.name,
+                    edited: false,
+                };
+
+                const newMessageDocRef = await firestore
+                    .collection("conversations")
+                    .doc(conversationId)
+                    .collection("messages")
+                    .add(newMessage);
+
+                await newMessageDocRef.update({
+                    messageId: newMessageDocRef.id,
+                });
+            });
+        },
+    });
+
+    const Filter = require("bad-words");
     const filter = new Filter();
 
     const localVideoRef = useRef(null);
@@ -898,6 +1148,19 @@ const DashboardContent = ({
             )}
             {messages && content[0] === "conversation" && (
                 <>
+                    {isDropzoneVisible && (
+                        <div
+                            {...getRootProps({
+                                className: `fixed w-full h-screen z-20 pointer-events-auto`,
+                            })}
+                        >
+                            {isDragActive && (
+                                <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-slate-600 dark:bg-opacity-30 bg-opacity-50">
+
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div
                         className="relative min-h-full w-full flex flex-col items-start justify-end p-4 overflow-y-auto no-scrollbar no-scrollbar::-webkit-scrollbar"
                         style={{
@@ -912,7 +1175,7 @@ const DashboardContent = ({
                             return (
                                 <div
                                     key={index}
-                                    className="flex items-start justify-start gap-4 w-full min-h-16 p-1"
+                                    className="flex items-start justify-start gap-4 w-full min-h-16 p-1 my-1"
                                 >
                                     <Popover>
                                         <PopoverTrigger>
@@ -931,7 +1194,7 @@ const DashboardContent = ({
                                         </PopoverTrigger>
                                         <PopoverContent
                                             sideOffset={10}
-                                            className="w-min h-min bg-slate-300 dark:bg-slate-900 border-slate-500"
+                                            className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
                                         >
                                             <UserProfilePopup
                                                 serverId={null}
@@ -1074,7 +1337,12 @@ const DashboardContent = ({
                                                             </div>
                                                         </div>
                                                     )}
-                                                <span>{filter.clean(message.text)}</span>
+                                                <span>
+                                                    {message.text &&
+                                                        filter.clean(
+                                                            message.text
+                                                        )}
+                                                </span>
                                                 {message.edited && (
                                                     <div className="text-[10px]">
                                                         (edited)
@@ -1118,7 +1386,10 @@ const DashboardContent = ({
                                                                     );
                                                                 }}
                                                             >
-                                                                Delete Message
+                                                                <span className="text-red-600 font-bold">
+                                                                    Delete
+                                                                    Message
+                                                                </span>
                                                             </ContextMenuItem>
                                                         </>
                                                     ))) || (
@@ -1424,11 +1695,13 @@ const DashboardInfo = ({
             };
 
             getUserData();
+        } else {
+            setUserData(null);
         }
     }, [content]);
 
     return (
-        <div className="z-10 h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2">
+        <div className="z-50 h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2">
             {userData && (
                 <>
                     <div className="min-w-40 h-56 mt-10 flex flex-col items-center justify-start pt-2 gap-4">

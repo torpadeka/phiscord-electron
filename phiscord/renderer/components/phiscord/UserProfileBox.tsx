@@ -110,7 +110,7 @@ const UserProfileBox = () => {
                         </PopoverTrigger>
                         <PopoverContent
                             sideOffset={10}
-                            className="w-min h-min bg-slate-300 dark:bg-slate-900 border-slate-500"
+                            className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
                         >
                             <UserProfilePopup
                                 serverId={null}
@@ -181,6 +181,7 @@ const UserProfileBox = () => {
                         {isMute && (
                             <TbMicrophoneOff
                                 className="hover:scale-110 transition-all cursor-pointer"
+                                color="red"
                                 onClick={() => {
                                     setIsMute(false);
                                 }}
@@ -199,6 +200,7 @@ const UserProfileBox = () => {
                         {isDeafen && (
                             <TbHeadphonesOff
                                 className="hover:scale-110 transition-all cursor-pointer"
+                                color="red"
                                 onClick={() => {
                                     setIsDeafen(false);
                                 }}

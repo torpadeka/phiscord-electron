@@ -23,6 +23,8 @@ import { Label } from "../ui/label";
 import { IoPrismSharp } from "react-icons/io5";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { RiRectangleFill } from "react-icons/ri";
+import { Toaster } from "../ui/toaster";
+import { useToast } from "../ui/use-toast";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -44,6 +46,19 @@ const SideBar = ({ activePage, setActivePage }) => {
 
     const [newServerName, setNewServerName] = useState("");
     const [joinServerCode, setJoinServerCode] = useState("");
+    const [toastMessage, setToastMessage] = useState("");
+
+    const { toast } = useToast();
+
+    // Show toast message
+    useEffect(() => {
+        if (toastMessage) {
+            toast({
+                title: toastMessage,
+            });
+            setToastMessage(""); // Clear the message after showing the toast
+        }
+    }, [toastMessage, toast]);
 
     useEffect(() => {
         if (user) {
@@ -114,6 +129,7 @@ const SideBar = ({ activePage, setActivePage }) => {
 
         setIsAddingNewServer(false);
         setNewServerName("");
+        setToastMessage("Created new server successfully!");
     };
 
     const handleJoinServer = async () => {
@@ -147,10 +163,12 @@ const SideBar = ({ activePage, setActivePage }) => {
 
         setIsAddingNewServer(false);
         setJoinServerCode("");
+        setToastMessage("Joined server successfully!");
     };
 
     return (
         <>
+            <Toaster />
             <Dialog
                 open={isAddingNewServer}
                 onOpenChange={setIsAddingNewServer}
