@@ -20,6 +20,7 @@ import { Inter as FontSans } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import GeneralSettings from "./GeneralSettings";
+import PrivacySettings from "./PrivacySettings";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -121,7 +122,9 @@ const TopBar = () => {
                                     <TabsContent
                                         className="fade-in-faster h-96 w-full overflow-y-scroll overflow-x-hidden no-scrollbar no-scrollbar::-webkit-scrollbar px-2"
                                         value="privacy"
-                                    ></TabsContent>
+                                    >
+                                        <PrivacySettings></PrivacySettings>
+                                    </TabsContent>
                                 </Tabs>
                             </div>
                         </DialogDescription>

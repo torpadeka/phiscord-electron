@@ -1,4 +1,4 @@
-import firebase, { firestore } from "../../../firebase/clientApp";
+import firebase, { database, firestore } from "../../../firebase/clientApp";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { useEffect, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,7 +26,13 @@ const fontSans = FontSans({
     variable: "--font-sans",
 });
 
-const UserProfilePopup = ({ serverId, userUid }) => {
+const UserProfilePopup = ({
+    serverId,
+    userUid,
+    setActivePage,
+    dashboardContent,
+    setDashboardContent,
+}) => {
     const auth = firebase.auth() as unknown as Auth;
     const [user] = useAuthState(auth);
 
@@ -35,8 +41,56 @@ const UserProfilePopup = ({ serverId, userUid }) => {
     const [changeNicknameInput, setChangeNicknameInput] = useState("");
     const [changeNicknameError, setChangeNicknameError] = useState("");
     const [nickname, setNickname] = useState(null);
+    const [userRealtimeStatus, setUserRealtimeStatus] = useState(null);
     const [localToastMessage, setLocalToastMessage] = useState(""); // Local toast message state
     const { toast } = useToast();
+    const [isBlocked, setIsBlocked] = useState(null);
+
+    useEffect(() => {
+        const checkIsBlocked = firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .where("userUid", "==", userUid)
+            .onSnapshot((snapshot) => {
+                if (!snapshot.empty) {
+                    setIsBlocked(true);
+                } else {
+                    setIsBlocked(false);
+                }
+            });
+
+        return () => checkIsBlocked();
+    }, []);
+
+    useEffect(() => {
+        const getUserRealTimeStatus = async () => {
+            const userStatusDatabaseRef = database.ref(
+                `userState/${userUid}/status`
+            );
+
+            const handleStatusUpdate = (snapshot) => {
+                if (snapshot.exists()) {
+                    if (snapshot.val() === "online") {
+                        setUserRealtimeStatus("Online");
+                    } else {
+                        setUserRealtimeStatus("Offline");
+                    }
+                } else {
+                    setUserRealtimeStatus("Offline");
+                }
+            };
+
+            userStatusDatabaseRef.on("value", handleStatusUpdate);
+
+            // Clean up the listener when the component unmounts
+            return () => {
+                userStatusDatabaseRef.off("value", handleStatusUpdate);
+            };
+        };
+
+        getUserRealTimeStatus();
+    }, []);
 
     // Show local toast message
     useEffect(() => {
@@ -88,13 +142,17 @@ const UserProfilePopup = ({ serverId, userUid }) => {
 
     // Function to handle nickname change
     const handleChangeNickname = async () => {
-        if (changeNicknameInput.length < 2) {
-            setChangeNicknameError("Nicknames must have 2 characters minimum!");
+        if (changeNicknameInput.length > 20) {
+            setChangeNicknameError(
+                "Nicknames can only be 20 characters at most!"
+            );
             return;
         }
 
-        if (changeNicknameInput.length > 20) {
-            setChangeNicknameError("Nicknames can only be 20 characters at most!");
+        if (!/^(?!\s)(.*?)(?<!\s)$/.test(changeNicknameInput)) {
+            setChangeNicknameError(
+                "Nicknames cannot have spaces in the beginning or end!"
+            );
             return;
         }
 
@@ -133,10 +191,262 @@ const UserProfilePopup = ({ serverId, userUid }) => {
                     });
             }
         }
-        
+
         setLocalToastMessage("Nickname changed!"); // Set local toast message
         setChangeNicknameError("");
         setChangeNickname(false);
+    };
+
+    const handleAddFriend = async () => {
+        const checkSenderBlockedList = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .where("userUid", "==", userUid)
+            .get();
+
+        if (!checkSenderBlockedList.empty) {
+            setLocalToastMessage("You blocked this user!");
+            return;
+        }
+
+        const checkReceiverBlockedList = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("blockedList")
+            .where("userUid", "==", user.uid)
+            .get();
+
+        if (!checkReceiverBlockedList.empty) {
+            setLocalToastMessage("This user has blocked you!");
+            return;
+        }
+
+        // check if the users are already friends
+        const userFriendListRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("friendList")
+            .where("userUid", "==", userUid)
+            .get();
+
+        if (!userFriendListRef.empty) {
+            setLocalToastMessage("You are already friends with this user!");
+            return;
+        }
+
+        const userPendingListRef = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList");
+
+        // Check if this user have already sent the request before
+        const checkOutgoingRequest = await userPendingListRef
+            .where("senderUid", "==", user.uid)
+            .where("receiverUid", "==", userUid)
+            .get();
+        if (!checkOutgoingRequest.empty) {
+            setLocalToastMessage(
+                "You have already sent a pending friend request to this user!"
+            );
+            return;
+        }
+
+        // Check if the user that this user is adding have already sent a request to this user first,
+        // in which case the other user will automatically become a friend.
+        const checkIngoingRequest = await userPendingListRef
+            .where("senderUid", "==", userUid)
+            .where("receiverUid", "==", user.uid)
+            .get();
+
+        if (!checkIngoingRequest.empty) {
+            // Remove the other user's outgoing pending request first
+            const friendPendingRef = await firestore
+                .collection("users")
+                .doc(userUid)
+                .collection("pendingList")
+                .where("senderUid", "==", userUid)
+                .where("receiverUid", "==", user.uid)
+                .get();
+
+            const friendPendingDocRef = await firestore
+                .collection("users")
+                .doc(userUid)
+                .collection("pendingList")
+                .doc(friendPendingRef.docs[0].id);
+
+            await friendPendingDocRef.delete();
+
+            // Then remove this user's ingoing pending request
+            const userPendingRef = await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("pendingList")
+                .where("senderUid", "==", userUid)
+                .where("receiverUid", "==", user.uid)
+                .get();
+
+            const userPendingDocRef = await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("pendingList")
+                .doc(userPendingRef.docs[0].id);
+
+            await userPendingDocRef.delete();
+
+            // Finally, add each other as friends
+            await firestore
+                .collection("users")
+                .doc(userUid)
+                .collection("friendList")
+                .add({
+                    userUid: user.uid,
+                });
+
+            await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("friendList")
+                .add({
+                    userUid: userUid,
+                });
+
+            setLocalToastMessage(
+                "This user has already sent you a friend request! You are now friends!"
+            );
+
+            return;
+        }
+
+        // Add the pending request
+        await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("pendingList")
+            .add({
+                senderUid: user.uid,
+                receiverUid: userUid,
+                sentAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+
+        await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("pendingList")
+            .add({
+                senderUid: user.uid,
+                receiverUid: userUid,
+                sentAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+
+        setLocalToastMessage(
+            "Sent the friend request! Pray they heed your call!"
+        );
+    };
+
+    const handleBlock = async () => {
+        const thisFriendDocRef = (
+            await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("friendList")
+                .where("userUid", "==", userUid)
+                .get()
+        ).docs[0];
+
+        if (thisFriendDocRef && thisFriendDocRef.exists) {
+            const thisFriendDocRefId = thisFriendDocRef.id;
+
+            await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("friendList")
+                .doc(thisFriendDocRefId)
+                .delete();
+
+            const otherFriendDocRefId = (
+                await firestore
+                    .collection("users")
+                    .doc(userUid)
+                    .collection("friendList")
+                    .where("userUid", "==", user.uid)
+                    .get()
+            ).docs[0].id;
+
+            await firestore
+                .collection("users")
+                .doc(userUid)
+                .collection("friendList")
+                .doc(otherFriendDocRefId)
+                .delete();
+        }
+
+        await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .add({
+                userUid: userUid,
+            });
+
+        setLocalToastMessage("User Blocked!");
+    };
+
+    const handleCreateConversation = async () => {
+        const checkSenderBlockedList = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .where("userUid", "==", userUid)
+            .get();
+
+        if (!checkSenderBlockedList.empty) {
+            setLocalToastMessage("You blocked this user!");
+            return;
+        }
+
+        const checkReceiverBlockedList = await firestore
+            .collection("users")
+            .doc(userUid)
+            .collection("blockedList")
+            .where("userUid", "==", user.uid)
+            .get();
+
+        if (!checkReceiverBlockedList.empty) {
+            setLocalToastMessage("This user has blocked you!");
+            return;
+        }
+
+        const checkExistingConversation = await firestore
+            .collection("conversations")
+            .where("userIds", "array-contains", user.uid)
+            .get();
+
+        let conversationExists = false;
+        checkExistingConversation.forEach((conversationDoc) => {
+            if (conversationDoc.data().userIds.includes(userUid)) {
+                conversationExists = true;
+            }
+        });
+
+        if (conversationExists) {
+            setLocalToastMessage(
+                "Conversation already exists! Redirecting now . . ."
+            );
+
+            setActivePage(["dashboard", null]);
+            setDashboardContent(["conversation", userUid]);
+            return;
+        }
+
+        await firestore.collection("conversations").add({
+            userIds: [user.uid, userUid],
+            lastChanged: firebase.firestore.FieldValue.serverTimestamp(),
+        });
+
+        setActivePage(["dashboard", null]);
+        setDashboardContent(["conversation", userUid]);
+        setLocalToastMessage("New chat created successfully!");
     };
 
     return (
@@ -186,13 +496,27 @@ const UserProfilePopup = ({ serverId, userUid }) => {
                     </DialogHeader>
                 </DialogContent>
             </Dialog>
-            <div className="min-w-40 min-h-60 bg-slate-100 dark:bg-slate-900 flex flex-col items-center justify-start py-2 gap-4">
+            <div className="min-w-40 min-h-60 bg-slate-100 dark:bg-slate-900 flex flex-col items-center justify-start pt-4 gap-4">
                 {userData && (
                     <>
-                        <Avatar className="bg-white w-20 h-20">
-                            <AvatarImage src={userData[2]} />
-                            <AvatarFallback>{`:(`}</AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                            <Avatar className="bg-white w-20 h-20">
+                                <AvatarImage src={userData[2]} />
+                                <AvatarFallback>{`:(`}</AvatarFallback>
+                            </Avatar>
+                            {userRealtimeStatus === "Online" && (
+                                <div className="absolute bottom-0 right-0 flex items-center justify-center w-6 h-6 bg-slate-100 dark:bg-slate-900 rounded-full">
+                                    <div className="w-4 h-4 bg-green-500 rounded-full"></div>
+                                </div>
+                            )}
+                            {userRealtimeStatus === "Offline" && (
+                                <div className="absolute bottom-0 right-0 flex items-center justify-center w-6 h-6 bg-slate-100 dark:bg-slate-900 rounded-full">
+                                    <div className="w-4 h-4 bg-slate-500 rounded-full flex items-center justify-center">
+                                        <div className="w-2 h-2 bg-slate-100 dark:bg-slate-900 rounded-full"></div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         <div className="flex flex-col justify-center items-center w-full">
                             <span
                                 className={cn(
@@ -211,14 +535,16 @@ const UserProfilePopup = ({ serverId, userUid }) => {
                                 #{userData[1]}
                             </span>
                         </div>
-                        <span
-                            className={cn(
-                                "dark:text-white text-sm font-sans antialiased text-center bg-slate-300 dark:bg-slate-600 rounded-2xl py-2 px-4",
-                                fontSans.variable
-                            )}
-                        >
-                            {userData[3]}
-                        </span>
+                        {userData[3] && (
+                            <span
+                                className={cn(
+                                    "dark:text-white text-sm font-sans antialiased text-center bg-slate-300 dark:bg-slate-600 rounded-2xl py-2 px-4",
+                                    fontSans.variable
+                                )}
+                            >
+                                {userData[3]}
+                            </span>
+                        )}
                         {serverId && userUid === user.uid && (
                             <Button
                                 onClick={() => setChangeNickname(true)}
@@ -233,6 +559,59 @@ const UserProfilePopup = ({ serverId, userUid }) => {
                                     Change Nickname
                                 </span>
                             </Button>
+                        )}
+                        {isBlocked && (
+                            <div
+                                className={cn(
+                                    "dark:text-white text-xl font-sans antialiased w-full flex flex-col items-center justify-center gap-1 font-bold text-red-600",
+                                    fontSans.variable
+                                )}
+                            >
+                                BLOCKED
+                            </div>
+                        )}
+                        {isBlocked !== null && isBlocked === false && !(userUid === user.uid) && (
+                            <div className="w-full flex flex-col items-center justify-center gap-1">
+                                <Button
+                                    onClick={handleCreateConversation}
+                                    className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
+                                >
+                                    <span
+                                        className={cn(
+                                            "text-sm font-sans antialiased",
+                                            fontSans.variable
+                                        )}
+                                    >
+                                        Chat
+                                    </span>
+                                </Button>
+                                <Button
+                                    onClick={handleAddFriend}
+                                    className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
+                                >
+                                    <span
+                                        className={cn(
+                                            "text-sm font-sans antialiased",
+                                            fontSans.variable
+                                        )}
+                                    >
+                                        Add Friend
+                                    </span>
+                                </Button>
+                                <Button
+                                    onClick={handleBlock}
+                                    className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
+                                >
+                                    <span
+                                        className={cn(
+                                            "text-sm font-sans antialiased",
+                                            fontSans.variable
+                                        )}
+                                    >
+                                        Block
+                                    </span>
+                                </Button>
+                            </div>
                         )}
                     </>
                 )}

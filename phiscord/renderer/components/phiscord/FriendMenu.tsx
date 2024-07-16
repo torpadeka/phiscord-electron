@@ -231,7 +231,7 @@ const FriendMenu = ({
             .collection("users")
             .doc(newFriendUserId)
             .collection("blockedList")
-            .where("userUid", "==", newFriendUserId)
+            .where("userUid", "==", user.uid)
             .get();
 
         if (!checkReceiverBlockedList.empty) {
@@ -581,39 +581,43 @@ const UserItem = ({
     }, [userUid]);
 
     const handleRemoveFriend = async () => {
-        const thisFriendDocRefId = (
+        const thisFriendDocRef = (
             await firestore
                 .collection("users")
                 .doc(user.uid)
                 .collection("friendList")
                 .where("userUid", "==", userUid)
                 .get()
-        ).docs[0].id;
+        ).docs[0];
 
-        await firestore
-            .collection("users")
-            .doc(user.uid)
-            .collection("friendList")
-            .doc(thisFriendDocRefId)
-            .delete();
+        if (thisFriendDocRef && thisFriendDocRef.exists) {
+            const thisFriendDocRefId = thisFriendDocRef.id;
 
-        const otherFriendDocRefId = (
+            await firestore
+                .collection("users")
+                .doc(user.uid)
+                .collection("friendList")
+                .doc(thisFriendDocRefId)
+                .delete();
+
+            const otherFriendDocRefId = (
+                await firestore
+                    .collection("users")
+                    .doc(userUid)
+                    .collection("friendList")
+                    .where("userUid", "==", user.uid)
+                    .get()
+            ).docs[0].id;
+
             await firestore
                 .collection("users")
                 .doc(userUid)
                 .collection("friendList")
-                .where("userUid", "==", user.uid)
-                .get()
-        ).docs[0].id;
+                .doc(otherFriendDocRefId)
+                .delete();
 
-        await firestore
-            .collection("users")
-            .doc(userUid)
-            .collection("friendList")
-            .doc(otherFriendDocRefId)
-            .delete();
-
-        setIsRemovingFriend(false);
+            setIsRemovingFriend(false);
+        }
     };
 
     const handleBlockUser = async () => {

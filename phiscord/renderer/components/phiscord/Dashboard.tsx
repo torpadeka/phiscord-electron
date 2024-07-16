@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { LuBox } from "react-icons/lu";
 import { FaFile, FaPlus } from "react-icons/fa6";
 import { IoChatboxEllipsesSharp } from "react-icons/io5";
-import { FaUserFriends } from "react-icons/fa";
+import { FaSearch, FaUserFriends } from "react-icons/fa";
 import { MdCall, MdCallEnd, MdEmojiEmotions } from "react-icons/md";
 
 import EmojiPicker from "emoji-picker-react";
@@ -46,6 +46,7 @@ import { Toaster } from "../ui/toaster";
 import UserProfilePopup from "./UserProfilePopup";
 import TextareaAutosize from "react-textarea-autosize";
 import FriendMenu from "./FriendMenu";
+import { ScrollArea } from "../ui/scroll-area";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -66,15 +67,18 @@ const Dashboard = ({
     unmuteAudio,
     deafenAudio,
     undeafenAudio,
+    setActivePage,
+    content,
+    setContent,
 }) => {
-    const [content, setContent] = useState(["welcome", null]);
-
     return (
         <>
             <div className="flex w-full h-screen pl-20 pt-14">
-                <DashboardNavigation setContent={setContent} inCall={inCall} />
+                <DashboardNavigation content={content} setContent={setContent} inCall={inCall} />
                 <DashboardContent
                     content={content}
+                    setContent={setContent}
+                    setActivePage={setActivePage}
                     inCall={inCall}
                     setInCall={setInCall}
                     channelName={channelName}
@@ -102,7 +106,7 @@ const Dashboard = ({
     );
 };
 
-const DashboardNavigation = ({ setContent, inCall }) => {
+const DashboardNavigation = ({ content, setContent, inCall }) => {
     const [loading, setLoading] = useState(true);
     const auth = firebase.auth() as unknown as Auth;
     const [user] = useAuthState(auth);
@@ -119,6 +123,10 @@ const DashboardNavigation = ({ setContent, inCall }) => {
 
     const [toastMessage, setToastMessage] = useState("");
     const { toast } = useToast();
+
+    useEffect(() => {
+        setSelectedConversation(content[1]);
+    }, [content])
 
     useEffect(() => {
         setNewChatError("");
@@ -175,6 +183,30 @@ const DashboardNavigation = ({ setContent, inCall }) => {
             return;
         }
 
+        const checkSenderBlockedList = await firestore
+            .collection("users")
+            .doc(user.uid)
+            .collection("blockedList")
+            .where("userUid", "==", newChatUserId)
+            .get();
+
+        if (!checkSenderBlockedList.empty) {
+            setNewChatError("You blocked this user!");
+            return;
+        }
+
+        const checkReceiverBlockedList = await firestore
+            .collection("users")
+            .doc(newChatUserId)
+            .collection("blockedList")
+            .where("userUid", "==", user.uid)
+            .get();
+
+        if (!checkReceiverBlockedList.empty) {
+            setNewChatError("This user has blocked you!");
+            return;
+        }
+
         const checkExistingConversation = await firestore
             .collection("conversations")
             .where("userIds", "array-contains", user.uid)
@@ -206,6 +238,8 @@ const DashboardNavigation = ({ setContent, inCall }) => {
         setNewChatError(""); // Clear any previous error
         setToastMessage("New chat created successfully!");
         setIsCreatingNewChat(false);
+        setSelectedConversation(newChatUserId);
+        setContent(["conversation", newChatUserId]);
     };
 
     useEffect(() => {
@@ -253,16 +287,39 @@ const DashboardNavigation = ({ setContent, inCall }) => {
             .get();
 
         let conversationId = "";
+        let conversationRef = null;
 
         conversationDoc.forEach((doc) => {
             if (doc.data().userIds.includes(deletingConversation)) {
-                doc.ref.delete();
+                conversationRef = doc.ref;
                 conversationId = doc.ref.id;
                 return;
             }
         });
 
-        console.log("firestore deletion conversation: ");
+        if (!conversationRef) {
+            console.error("Conversation not found");
+            setToastMessage("Error! Conversation not found.");
+            return;
+        }
+
+        // Reference to the 'messages' subcollection
+        const messagesCollectionRef = conversationRef.collection("messages");
+
+        // Fetch all documents in the 'messages' subcollection and delete them
+        const deleteMessages = async () => {
+            const snapshot = await messagesCollectionRef.get();
+            const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
+            await Promise.all(deletePromises);
+        };
+
+        // Delete the 'messages' subcollection
+        await deleteMessages();
+
+        // Now delete the conversation document
+        await conversationRef.delete();
+
+        console.log("firestore deletion conversation: ", conversationId);
 
         const listRef = storage.ref().child(`messages/${conversationId}/`);
 
@@ -325,7 +382,7 @@ const DashboardNavigation = ({ setContent, inCall }) => {
                 console.error("Error listing files in sub-folder:", error);
             });
     };
-    
+
     return (
         <div className="h-full min-w-72 bg-slate-100 dark:bg-slate-700 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar flex-col items-center justify-center pt-2">
             <Toaster />
@@ -538,7 +595,7 @@ const ConversationNavigationItem = ({
     userUid,
     selected,
     setSelected,
-    searchInput
+    searchInput,
 }) => {
     const [userData, setUserData] = useState(null);
     const [userRealtimeStatus, setUserRealtimeStatus] = useState(null);
@@ -592,36 +649,39 @@ const ConversationNavigationItem = ({
 
     return (
         <>
-            {userData && userData[0].toLowerCase().includes(searchInput.toLowerCase()) && (
-                <div
-                    className={cn(
-                        "flex w-full min-h-12 items-center justify-start px-2 py-2 gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl",
-                        selected === true
-                            ? "dark:bg-slate-800 bg-slate-300"
-                            : ""
-                    )}
-                    onClick={() => {
-                        console.log("CONVO CLICKED");
-                        setSelected(userUid);
-                        setContent(["conversation", userUid]);
-                    }}
-                >
-                    <Avatar className="bg-white">
-                        <AvatarImage src={userData[3]} />
-                        <AvatarFallback>{}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col justify-center items-start">
-                        <span className="font-semibold max-w-44 overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
-                            {userData[0]}
-                        </span>
-                        <span className="text-sm text-slate-600 dark:text-slate-400 max-w-44 whitespace-nowrap overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
-                            {userRealtimeStatus === "Offline"
-                                ? userRealtimeStatus
-                                : userData[2] || userRealtimeStatus}
-                        </span>
+            {userData &&
+                userData[0]
+                    .toLowerCase()
+                    .includes(searchInput.toLowerCase()) && (
+                    <div
+                        className={cn(
+                            "flex w-full min-h-12 items-center justify-start px-2 py-2 gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl",
+                            selected === true
+                                ? "dark:bg-slate-800 bg-slate-300"
+                                : ""
+                        )}
+                        onClick={() => {
+                            console.log("CONVO CLICKED");
+                            setSelected(userUid);
+                            setContent(["conversation", userUid]);
+                        }}
+                    >
+                        <Avatar className="bg-white">
+                            <AvatarImage src={userData[3]} />
+                            <AvatarFallback>{}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col justify-center items-start">
+                            <span className="font-semibold max-w-44 overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
+                                {userData[0]}
+                            </span>
+                            <span className="text-sm text-slate-600 dark:text-slate-400 max-w-44 whitespace-nowrap overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
+                                {userRealtimeStatus === "Offline"
+                                    ? userRealtimeStatus
+                                    : userData[2] || userRealtimeStatus}
+                            </span>
+                        </div>
                     </div>
-                </div>
-            )}
+                )}
             {!userData && (
                 <div className="flex min-w-72 min-h-12 items-center justify-start px-6 py-2 gap-3">
                     <AiOutlineLoading
@@ -636,6 +696,8 @@ const ConversationNavigationItem = ({
 
 const DashboardContent = ({
     content,
+    setContent,
+    setActivePage,
     inCall,
     setInCall,
     channelName,
@@ -682,6 +744,8 @@ const DashboardContent = ({
         "",
     ]);
     const [isDropzoneVisible, setDropzoneVisible] = useState(false);
+    const [searchingMessage, setSearchingMessage] = useState(false);
+    const [searchMessageInput, setSearchMessageInput] = useState("");
     const dragCounter = useRef(0);
 
     useEffect(() => {
@@ -791,18 +855,26 @@ const DashboardContent = ({
             return;
         }
 
-        const getUserData = async (uid: string) => {
-            if (!userData[uid]) {
-                const userDoc = await firestore
+        const trackedUids = new Set();
+        let unsubscribeFunctions = [];
+
+        const getUserData = (uid) => {
+            if (!trackedUids.has(uid)) {
+                trackedUids.add(uid);
+                const unsubscribe = firestore
                     .collection("users")
                     .doc(uid)
-                    .get();
-                if (userDoc.exists) {
-                    setUserData((prevData) => ({
-                        ...prevData,
-                        [uid]: userDoc.data(),
-                    }));
-                }
+                    .onSnapshot((userDoc) => {
+                        if (userDoc.exists) {
+                            setUserData((prevData) => ({
+                                ...prevData,
+                                [uid]: userDoc.data(),
+                            }));
+                        }
+                    });
+
+                // Store the unsubscribe function for cleanup
+                unsubscribeFunctions.push(unsubscribe);
             }
         };
 
@@ -811,7 +883,7 @@ const DashboardContent = ({
             content[1]
         );
 
-        const unsubscribe = firestore
+        const unsubscribeConversation = firestore
             .collection("conversations")
             .where("userIds", "array-contains", user.uid)
             .onSnapshot(
@@ -828,12 +900,12 @@ const DashboardContent = ({
                         setConversationId(conversation.id);
                         const messageRef =
                             conversation.ref.collection("messages");
-                        const unsubscribe = messageRef
+                        const unsubscribeMessages = messageRef
                             .orderBy("createdAt", "asc")
                             .onSnapshot(
                                 (snapshot) => {
-                                    const messagesList: Message[] =
-                                        snapshot.docs.map((messageDoc) => {
+                                    const messagesList = snapshot.docs.map(
+                                        (messageDoc) => {
                                             const messageData =
                                                 messageDoc.data();
                                             getUserData(messageData.senderUid);
@@ -854,7 +926,8 @@ const DashboardContent = ({
                                                 messageId: messageDoc.id,
                                                 edited: messageData.edited,
                                             };
-                                        });
+                                        }
+                                    );
                                     setMessages(messagesList);
                                     setLoading(false);
                                     console.log(
@@ -869,11 +942,9 @@ const DashboardContent = ({
                                             .collection("blockedList")
                                             .where("userUid", "==", user.uid)
                                             .onSnapshot((snapshot) => {
-                                                if (!snapshot.empty) {
-                                                    setIsIngoingBlocked(true);
-                                                } else {
-                                                    setIsIngoingBlocked(false); // Fixed typo here
-                                                }
+                                                setIsIngoingBlocked(
+                                                    !snapshot.empty
+                                                );
                                             });
 
                                         const unsubscribeOutgoing = firestore
@@ -882,11 +953,9 @@ const DashboardContent = ({
                                             .collection("blockedList")
                                             .where("userUid", "==", content[1])
                                             .onSnapshot((snapshot) => {
-                                                if (!snapshot.empty) {
-                                                    setIsOutgoingBlocked(true);
-                                                } else {
-                                                    setIsOutgoingBlocked(false);
-                                                }
+                                                setIsOutgoingBlocked(
+                                                    !snapshot.empty
+                                                );
                                             });
 
                                         return () => {
@@ -895,9 +964,12 @@ const DashboardContent = ({
                                         };
                                     };
 
-                                    const unsubscribe = checkBlocked();
+                                    const unsubscribeBlocked = checkBlocked();
+                                    unsubscribeFunctions.push(
+                                        unsubscribeBlocked
+                                    );
 
-                                    return unsubscribe;
+                                    return unsubscribeMessages;
                                 },
                                 (error) => {
                                     console.error(
@@ -908,7 +980,7 @@ const DashboardContent = ({
                                 }
                             );
 
-                        return unsubscribe;
+                        unsubscribeFunctions.push(unsubscribeMessages);
                     } else {
                         console.error("Conversation not found");
                         setLoading(false);
@@ -920,7 +992,11 @@ const DashboardContent = ({
                 }
             );
 
-        return () => unsubscribe();
+        unsubscribeFunctions.push(unsubscribeConversation);
+
+        return () => {
+            unsubscribeFunctions.forEach((unsubscribe) => unsubscribe());
+        };
     }, [content]);
 
     const onEmojiClick = (emojiObject, event) => {
@@ -1025,16 +1101,17 @@ const DashboardContent = ({
 
             const conversationRef = await firestore
                 .collection("conversations")
-                .doc(conversationId).get();
+                .doc(conversationId)
+                .get();
 
-            const uids : string = conversationRef.data().userIds;
+            const uids: string = conversationRef.data().userIds;
             let receiverUid;
             let senderUid;
 
-            if(uids[0] === user.uid){
+            if (uids[0] === user.uid) {
                 receiverUid = uids[1];
                 senderUid = uids[0];
-            } else{
+            } else {
                 receiverUid = uids[0];
                 senderUid = uids[1];
             }
@@ -1044,11 +1121,15 @@ const DashboardContent = ({
             console.log(receiverUid);
 
             // Add Notifications
-            firestore.collection("users").doc(receiverUid).collection("notifications").add({
-                title: userData[senderUid].username,
-                body: newMessage.text,
-                icon: userData[senderUid].profilePicture,
-            })
+            firestore
+                .collection("users")
+                .doc(receiverUid)
+                .collection("notifications")
+                .add({
+                    title: userData[user.uid].username,
+                    body: newMessage.text,
+                    icon: userData[user.uid].profilePicture,
+                });
         }
     };
 
@@ -1128,8 +1209,8 @@ const DashboardContent = ({
     return (
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
             {inCall && channelName === conversationId && (
-                <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-400 flex justify-center items-center">
-                    <div className="local-video relative w-96 h-[188px] rounded-2xl border-slate-300 border-4">
+                <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-400 flex justify-center items-center flex-col">
+                    <div className="local-video relative w-[328px] h-[188px] rounded-2xl border-slate-300 border-4">
                         <div
                             ref={localVideoRef}
                             className="video-player z-50 rounded-xl"
@@ -1154,11 +1235,9 @@ const DashboardContent = ({
                             </div>
                         ))}
                     </div>
-                    <div className="flex flex-col items-center justify-center w-full">
+                    <div className="flex items-center justify-center w-full gap-2">
                         <Button onClick={unmuteVideo}>Camera On</Button>
                         <Button onClick={muteVideo}>Camera Off</Button>
-                        <Button onClick={muteAudio}>Mic Off</Button>
-                        <Button onClick={unmuteAudio}>Mic On</Button>
                     </div>
                 </div>
             )}
@@ -1182,9 +1261,7 @@ const DashboardContent = ({
                             })}
                         >
                             {isDragActive && (
-                                <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-slate-600 dark:bg-opacity-30 bg-opacity-50">
-
-                                </div>
+                                <div className="w-full h-full flex items-center justify-center bg-gray-800 dark:bg-slate-600 dark:bg-opacity-30 bg-opacity-50"></div>
                             )}
                         </div>
                     )}
@@ -1194,6 +1271,490 @@ const DashboardContent = ({
                             paddingBottom: `calc(${textareaHeight} + 2rem)`,
                         }}
                     >
+                        <Dialog
+                            open={searchingMessage}
+                            onOpenChange={setSearchingMessage}
+                        >
+                            <DialogTrigger>
+                                <div
+                                    onClick={() => setSearchingMessage(true)}
+                                    className={cn("shadow-md transition-colors cursor-pointer hover:brightness-150 flex items-center justify-center w-10 h-10 bg-slate-600 rounded-full dark:bg-slate-600 fixed left-[376px] z-50", 
+                                        inCall? "top-[355px]" : "top-16"
+                                    )}
+                                >
+                                    <FaSearch
+                                        className="fill-white"
+                                        size={20}
+                                    />
+                                </div>
+                            </DialogTrigger>
+                            <DialogContent>
+                                <DialogHeader>
+                                    <DialogTitle
+                                        className={cn(
+                                            "dark:text-white text-xl font-sans antialiased",
+                                            fontSans.variable
+                                        )}
+                                    >
+                                        Search Messages
+                                    </DialogTitle>
+                                    <DialogDescription
+                                        className={cn(
+                                            "dark:text-white text-xl font-sans antialiased",
+                                            fontSans.variable
+                                        )}
+                                    >
+                                        <div className="flex flex-col items-center justify-center gap-3 pt-4">
+                                            <Input
+                                                type="text"
+                                                placeholder="Search Here"
+                                                value={searchMessageInput}
+                                                onChange={(e) =>
+                                                    setSearchMessageInput(
+                                                        e.target.value
+                                                    )
+                                                }
+                                                className="w-full bg-slate-300 dark:bg-slate-700 rounded-2xl mt-4 p-4"
+                                            ></Input>
+                                            <ScrollArea className="w-[460px] h-72">
+                                                {messages.map(
+                                                    (message, index) => {
+                                                        const senderData =
+                                                            userData[
+                                                                message
+                                                                    .senderUid
+                                                            ];
+                                                        if (
+                                                            (message.text &&
+                                                                message.text
+                                                                    .toLowerCase()
+                                                                    .includes(
+                                                                        searchMessageInput.toLowerCase()
+                                                                    )) ||
+                                                            (message.isFileType &&
+                                                                message.fileName
+                                                                    .toLowerCase()
+                                                                    .includes(
+                                                                        searchMessageInput.toLowerCase()
+                                                                    ))
+                                                        )
+                                                            return (
+                                                                <div
+                                                                    key={index}
+                                                                    className="flex items-start justify-start gap-4 w-full min-h-16 p-1 my-1"
+                                                                >
+                                                                    <Popover>
+                                                                        <PopoverTrigger>
+                                                                            <Avatar className="bg-white">
+                                                                                <AvatarImage
+                                                                                    src={
+                                                                                        senderData
+                                                                                            ? senderData.profilePicture
+                                                                                            : null
+                                                                                    }
+                                                                                />
+                                                                                <AvatarFallback>
+                                                                                    {}
+                                                                                </AvatarFallback>
+                                                                            </Avatar>
+                                                                        </PopoverTrigger>
+                                                                        <PopoverContent
+                                                                            sideOffset={
+                                                                                10
+                                                                            }
+                                                                            className="w-min h-min bg-slate-100 dark:bg-slate-900 border-slate-500"
+                                                                        >
+                                                                            <UserProfilePopup
+                                                                                serverId={
+                                                                                    null
+                                                                                }
+                                                                                userUid={
+                                                                                    message.senderUid
+                                                                                }
+                                                                                dashboardContent={
+                                                                                    content
+                                                                                }
+                                                                                setDashboardContent={
+                                                                                    setContent
+                                                                                }
+                                                                                setActivePage={
+                                                                                    setActivePage
+                                                                                }
+                                                                            ></UserProfilePopup>
+                                                                        </PopoverContent>
+                                                                    </Popover>
+                                                                    <div className="flex flex-col items-start justify-center">
+                                                                        <div className="flex items-center justify-center gap-1">
+                                                                            <span className="font-bold text-black dark:text-white text-lg">
+                                                                                {senderData
+                                                                                    ? senderData.username
+                                                                                    : "Loading..."}
+                                                                            </span>
+                                                                            <span className="text-black dark:text-white text-[11px]">
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    (
+                                                                                        message.createdAt
+                                                                                            .toDate()
+                                                                                            .getMonth() +
+                                                                                        1
+                                                                                    ).toString()}
+
+                                                                                /
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    message.createdAt
+                                                                                        .toDate()
+                                                                                        .getDate()
+                                                                                        .toString()}
+
+                                                                                /
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    message.createdAt
+                                                                                        .toDate()
+                                                                                        .getFullYear()
+                                                                                        .toString()}
+                                                                            </span>
+                                                                            <span className="text-black dark:text-white text-[11px]">
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    message.createdAt
+                                                                                        .toDate()
+                                                                                        .getHours()
+                                                                                        .toString()}
+
+                                                                                :
+                                                                                {message &&
+                                                                                    message.createdAt &&
+                                                                                    (message.createdAt
+                                                                                        .toDate()
+                                                                                        .getMinutes() <
+                                                                                    10
+                                                                                        ? 0 +
+                                                                                          message.createdAt
+                                                                                              .toDate()
+                                                                                              .getMinutes()
+                                                                                              .toString()
+                                                                                        : message.createdAt
+                                                                                              .toDate()
+                                                                                              .getMinutes()
+                                                                                              .toString())}
+                                                                                {message &&
+                                                                                message.createdAt &&
+                                                                                message.createdAt
+                                                                                    .toDate()
+                                                                                    .getHours() >
+                                                                                    11 &&
+                                                                                message.createdAt
+                                                                                    .toDate()
+                                                                                    .getHours() <
+                                                                                    24
+                                                                                    ? " PM"
+                                                                                    : " AM"}
+                                                                            </span>
+                                                                        </div>
+                                                                        <ContextMenu>
+                                                                            <ContextMenuTrigger>
+                                                                                {message.isFileType &&
+                                                                                    message.isImageType &&
+                                                                                    !message.isVideoType && (
+                                                                                        <div className="flex flex-col gap-2 items-start">
+                                                                                            <a
+                                                                                                href={
+                                                                                                    message.file
+                                                                                                }
+                                                                                                target="_blank"
+                                                                                                rel="noopener noreferrer"
+                                                                                            >
+                                                                                                <img
+                                                                                                    className="max-h-60 rounded-xl"
+                                                                                                    src={
+                                                                                                        message.file
+                                                                                                    }
+                                                                                                ></img>
+                                                                                            </a>
+                                                                                            <div className="text-sm italic">
+                                                                                                {truncateString(
+                                                                                                    message.fileName,
+                                                                                                    50
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                {message.isFileType &&
+                                                                                    !message.isImageType &&
+                                                                                    message.isVideoType && (
+                                                                                        <div className="flex flex-col gap-2 items-start">
+                                                                                            <video
+                                                                                                className="max-h-60 rounded-xl"
+                                                                                                src={
+                                                                                                    message.file
+                                                                                                }
+                                                                                                controls={
+                                                                                                    true
+                                                                                                }
+                                                                                            ></video>
+                                                                                            <div className="text-sm italic">
+                                                                                                {truncateString(
+                                                                                                    message.fileName,
+                                                                                                    50
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                {message.isFileType &&
+                                                                                    !message.isImageType &&
+                                                                                    !message.isVideoType && (
+                                                                                        <div className="flex flex-col gap-2 items-start">
+                                                                                            <a
+                                                                                                href={
+                                                                                                    message.file
+                                                                                                }
+                                                                                                target="_blank"
+                                                                                                rel="noopener noreferrer"
+                                                                                            >
+                                                                                                <FaFile
+                                                                                                    className="m-2"
+                                                                                                    size={
+                                                                                                        70
+                                                                                                    }
+                                                                                                />
+                                                                                            </a>
+                                                                                            <div className="text-sm italic">
+                                                                                                {truncateString(
+                                                                                                    message.fileName,
+                                                                                                    50
+                                                                                                )}
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    )}
+                                                                                <span className="text-base">
+                                                                                    {message.text &&
+                                                                                        filter.clean(
+                                                                                            message.text
+                                                                                        )}
+                                                                                </span>
+                                                                                {message.edited && (
+                                                                                    <div className="text-[10px]">
+                                                                                        (edited)
+                                                                                    </div>
+                                                                                )}
+                                                                            </ContextMenuTrigger>
+                                                                            <ContextMenuContent
+                                                                                className={cn(
+                                                                                    "dark:text-white text-sm font-sans antialiased",
+                                                                                    fontSans.variable
+                                                                                )}
+                                                                            >
+                                                                                {(canModifyMessage(
+                                                                                    message.senderUid
+                                                                                ) &&
+                                                                                    (isIngoingBlocked ||
+                                                                                    isOutgoingBlocked ? (
+                                                                                        <span className="text-red-600">
+                                                                                            Cannot
+                                                                                            modify
+                                                                                            messages
+                                                                                            when
+                                                                                            blocked!
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <>
+                                                                                            {!message.file && (
+                                                                                                <ContextMenuItem
+                                                                                                    onClick={() => {
+                                                                                                        handleEditMessageClick(
+                                                                                                            message.messageId,
+                                                                                                            message.text
+                                                                                                        );
+                                                                                                    }}
+                                                                                                >
+                                                                                                    Edit
+                                                                                                    Message
+                                                                                                </ContextMenuItem>
+                                                                                            )}
+                                                                                            <ContextMenuItem
+                                                                                                onClick={() => {
+                                                                                                    handleDeleteMessageClick(
+                                                                                                        message.messageId
+                                                                                                    );
+                                                                                                }}
+                                                                                            >
+                                                                                                <span className="text-red-600 font-bold">
+                                                                                                    Delete
+                                                                                                    Message
+                                                                                                </span>
+                                                                                            </ContextMenuItem>
+                                                                                        </>
+                                                                                    ))) || (
+                                                                                    <span className="text-red-600">
+                                                                                        You
+                                                                                        can't
+                                                                                        modify
+                                                                                        this
+                                                                                        message!
+                                                                                    </span>
+                                                                                )}
+                                                                            </ContextMenuContent>
+                                                                        </ContextMenu>
+                                                                    </div>
+                                                                    <Dialog
+                                                                        open={
+                                                                            editingMessage[0]
+                                                                        }
+                                                                        onOpenChange={(
+                                                                            isOpen
+                                                                        ) =>
+                                                                            setEditingMessage(
+                                                                                [
+                                                                                    isOpen,
+                                                                                    editingMessage[1],
+                                                                                    editingMessage[2],
+                                                                                ]
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <DialogContent>
+                                                                            <DialogHeader className="flex flex-col gap-4">
+                                                                                <DialogTitle
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    Edit
+                                                                                    Message
+                                                                                </DialogTitle>
+                                                                                <DialogDescription
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    <TextareaAutosize
+                                                                                        value={
+                                                                                            editingMessage[2]
+                                                                                        }
+                                                                                        onChange={
+                                                                                            handleTextareaChange
+                                                                                        }
+                                                                                        className={cn(
+                                                                                            "flex w-full min-h-10 rounded-2xl border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 bg-slate-300 dark:bg-slate-700 resize-none no-scrollbar no-scrollbar::-webkit-scrollbar"
+                                                                                        )}
+                                                                                    ></TextareaAutosize>
+                                                                                    <div className="w-full flex justify-end pt-4 gap-4">
+                                                                                        <Popover>
+                                                                                            <PopoverTrigger>
+                                                                                                <MdEmojiEmotions className="w-9 h-9 p-1 rounded-xl fill-black dark:fill-white" />
+                                                                                            </PopoverTrigger>
+                                                                                            <PopoverContent className="bg-slate-300 dark:bg-slate-900 w-96">
+                                                                                                <EmojiPicker
+                                                                                                    onEmojiClick={
+                                                                                                        onEditEmojiClick
+                                                                                                    }
+                                                                                                />
+                                                                                            </PopoverContent>
+                                                                                        </Popover>
+                                                                                        <Button
+                                                                                            onClick={
+                                                                                                handleConfirmEditMessage
+                                                                                            }
+                                                                                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                                        >
+                                                                                            Confirm
+                                                                                            Edit
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </DialogDescription>
+                                                                            </DialogHeader>
+                                                                        </DialogContent>
+                                                                    </Dialog>
+                                                                    <Dialog
+                                                                        open={
+                                                                            deletingMessage[0]
+                                                                        }
+                                                                        onOpenChange={(
+                                                                            isOpen
+                                                                        ) =>
+                                                                            setDeletingMessage(
+                                                                                [
+                                                                                    isOpen,
+                                                                                    deletingMessage[1],
+                                                                                ]
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        <DialogContent>
+                                                                            <DialogHeader className="flex flex-col gap-4">
+                                                                                <DialogTitle
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    Confirm
+                                                                                    Message
+                                                                                    Deletion?
+                                                                                </DialogTitle>
+                                                                                <DialogDescription
+                                                                                    className={cn(
+                                                                                        "dark:text-white text-xl font-sans antialiased",
+                                                                                        fontSans.variable
+                                                                                    )}
+                                                                                >
+                                                                                    <span className="text-red text-[16px]">
+                                                                                        The
+                                                                                        message
+                                                                                        will
+                                                                                        be
+                                                                                        permanently
+                                                                                        deleted
+                                                                                        from
+                                                                                        our
+                                                                                        database!
+                                                                                        This
+                                                                                        cannot
+                                                                                        be
+                                                                                        undone!
+                                                                                    </span>
+                                                                                    <div className="w-full flex justify-end pt-4 gap-4">
+                                                                                        <Button
+                                                                                            onClick={
+                                                                                                handleConfirmDeleteMessage
+                                                                                            }
+                                                                                            className="bg-red-600 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                                        >
+                                                                                            Confirm
+                                                                                        </Button>
+                                                                                        <Button
+                                                                                            onClick={() => {
+                                                                                                setDeletingMessage(
+                                                                                                    [
+                                                                                                        false,
+                                                                                                        "",
+                                                                                                    ]
+                                                                                                );
+                                                                                            }}
+                                                                                            className="bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl"
+                                                                                        >
+                                                                                            Cancel
+                                                                                        </Button>
+                                                                                    </div>
+                                                                                </DialogDescription>
+                                                                            </DialogHeader>
+                                                                        </DialogContent>
+                                                                    </Dialog>
+                                                                </div>
+                                                            );
+                                                    }
+                                                )}
+                                            </ScrollArea>
+                                        </div>
+                                    </DialogDescription>
+                                </DialogHeader>
+                            </DialogContent>
+                        </Dialog>
                         <span className="flex w-full text-sm items-center justify-center py-10 dark:text-slate-300 text-slate-700">
                             Thus marks the beginning of your legendary chat
                         </span>
@@ -1226,6 +1787,9 @@ const DashboardContent = ({
                                             <UserProfilePopup
                                                 serverId={null}
                                                 userUid={message.senderUid}
+                                                dashboardContent={content}
+                                                setDashboardContent={setContent}
+                                                setActivePage={setActivePage}
                                             ></UserProfilePopup>
                                         </PopoverContent>
                                     </Popover>

@@ -8,10 +8,6 @@ const { RtcTokenBuilder, RtcRole } = require("agora-access-token");
 
 const isProd = process.env.NODE_ENV === "production";
 
-if (process.platform === "win32") {
-    app.setAppUserModelId("PHiscord");
-}
-
 // AGORA BACKEND FOR RETRIEVING TOKENS BASED ON CHANNEL-NAMES
 const APP_ID = "97053747cb414a02bb27de8e55549466";
 const APP_CERTIFICATE = "2e62982b423148b582d9a9d71cd33606";
@@ -59,23 +55,45 @@ if (isProd) {
     app.setPath("userData", `${app.getPath("userData")} (development)`);
 }
 
+// Main app logic
 (async () => {
-    await app.whenReady();
+    try {
+        await app.whenReady();
 
-    const mainWindow = createWindow("main", {
-        width: 1400,
-        height: 800,
-        webPreferences: {
-            preload: path.join(__dirname, "preload.js"),
-        },
-    });
+        if (process.platform === "win32") {
+            app.setAppUserModelId("PHiscord");
+        }
 
-    if (isProd) {
-        await mainWindow.loadURL("app://./home");
-    } else {
-        const port = process.argv[2];
-        await mainWindow.loadURL(`http://localhost:${port}/home`);
-        mainWindow.webContents.openDevTools();
+        // Set up jump list before creating the window
+        app.setJumpList([
+            {
+              type: 'custom',
+              name: 'Quick Actions',
+              items: [
+                { type: 'task', title: 'Disconnect', description: 'Disconnect from channel', program: process.execPath, args: '--disconnect', iconPath: process.execPath, iconIndex: 0 },
+                { type: 'task', title: 'Mute', description: 'Toggle mute', program: process.execPath, args: '--toggle-mute', iconPath: process.execPath, iconIndex: 0 },
+                { type: 'task', title: 'Deafen', description: 'Toggle deafen', program: process.execPath, args: '--toggle-deafen', iconPath: process.execPath, iconIndex: 0 }
+              ]
+            }
+          ]);
+
+        const mainWindow = createWindow("main", {
+            width: 1400,
+            height: 800,
+            webPreferences: {
+                preload: path.join(__dirname, "preload.js"),
+            },
+        });
+
+        if (isProd) {
+            await mainWindow.loadURL("app://./home");
+        } else {
+            const port = process.argv[2];
+            await mainWindow.loadURL(`http://localhost:${port}/home`);
+            mainWindow.webContents.openDevTools();
+        }
+    } catch (error) {
+        console.error("Error initializing app:", error);
     }
 })();
 

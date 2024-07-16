@@ -1,7 +1,7 @@
 import { firestore, storage } from "../../../firebase/clientApp";
 import firebase, { database } from "../../../firebase/clientApp";
 import type { Auth } from "firebase/auth";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 
 import {
     Accordion,
@@ -58,7 +58,12 @@ const fontSans = FontSans({
     variable: "--font-sans",
 });
 
-const ServerDashboard = ({ setActivePage, serverId }) => {
+const ServerDashboard = ({
+    setActivePage,
+    serverId,
+    setDashboardContent,
+    dashboardContent,
+}) => {
     const auth = firebase.auth() as unknown as Auth;
     const [user] = useAuthState(auth);
     const [serverContent, setServerContent] = useState([null, null]);
@@ -85,8 +90,16 @@ const ServerDashboard = ({ setActivePage, serverId }) => {
             <ServerDashboardContent
                 serverId={serverId}
                 serverContent={serverContent}
+                dashboardContent={dashboardContent}
+                setDashboardContent={setDashboardContent}
+                setActivePage={setActivePage}
             ></ServerDashboardContent>
-            <ServerDashboardInfo serverId={serverId}></ServerDashboardInfo>
+            <ServerDashboardInfo
+                serverId={serverId}
+                dashboardContent={dashboardContent}
+                setDashboardContent={setDashboardContent}
+                setActivePage={setActivePage}
+            ></ServerDashboardInfo>
         </div>
     );
 };
@@ -560,12 +573,28 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
     };
 
     const handleDeleteTextChannel = async () => {
-        await firestore
+        // Reference to the text channel document
+        const textChannelDocRef = firestore
             .collection("servers")
             .doc(serverId)
             .collection("textChannels")
-            .doc(deletingTextChannel.toString())
-            .delete();
+            .doc(deletingTextChannel.toString());
+
+        // Reference to the 'messages' subcollection
+        const messagesCollectionRef = textChannelDocRef.collection("messages");
+
+        // Fetch all documents in the 'messages' subcollection and delete them
+        const deleteMessages = async () => {
+            const snapshot = await messagesCollectionRef.get();
+            const deletePromises = snapshot.docs.map((doc) => doc.ref.delete());
+            await Promise.all(deletePromises);
+        };
+
+        // Delete the 'messages' subcollection
+        await deleteMessages();
+
+        // Now delete the text channel document
+        await textChannelDocRef.delete();
 
         if (
             selectedChannel[0] === "textchannel" &&
@@ -1455,50 +1484,56 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                                                         }
                                                     </span>
                                                 </div>
-                                                <Popover>
-                                                    <PopoverTrigger>
-                                                        <HiDotsVertical
-                                                            size={15}
-                                                            className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
-                                                        />
-                                                    </PopoverTrigger>
-                                                    <PopoverContent
-                                                        className={cn(
-                                                            "dark:text-white text-sm font-sans antialiased w-40",
-                                                            fontSans.variable
-                                                        )}
-                                                    >
-                                                        <span
-                                                            onClick={() => {
-                                                                setEditingTextChannel(
-                                                                    textChannel.textChannelId
-                                                                );
-                                                                setEditingTextChannelInput(
-                                                                    textChannel.textChannelName
-                                                                );
-                                                            }}
+                                                {(user.uid ===
+                                                    serverNavigationData.ownerUid ||
+                                                    serverNavigationData.adminList.includes(
+                                                        user.uid
+                                                    )) && (
+                                                    <Popover>
+                                                        <PopoverTrigger>
+                                                            <HiDotsVertical
+                                                                size={15}
+                                                                className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
+                                                            />
+                                                        </PopoverTrigger>
+                                                        <PopoverContent
                                                             className={cn(
-                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-black dark:text-white text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                "dark:text-white text-sm font-sans antialiased w-40",
                                                                 fontSans.variable
                                                             )}
                                                         >
-                                                            Edit Channel
-                                                        </span>
-                                                        <span
-                                                            onClick={() => {
-                                                                setDeletingTextChannel(
-                                                                    textChannel.textChannelId
-                                                                );
-                                                            }}
-                                                            className={cn(
-                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-red-500 text-sm font-bold font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
-                                                                fontSans.variable
-                                                            )}
-                                                        >
-                                                            Delete Channel
-                                                        </span>
-                                                    </PopoverContent>
-                                                </Popover>
+                                                            <span
+                                                                onClick={() => {
+                                                                    setEditingTextChannel(
+                                                                        textChannel.textChannelId
+                                                                    );
+                                                                    setEditingTextChannelInput(
+                                                                        textChannel.textChannelName
+                                                                    );
+                                                                }}
+                                                                className={cn(
+                                                                    "cursor-pointer w-full p-1 flex justify-start items-center text-black dark:text-white text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                    fontSans.variable
+                                                                )}
+                                                            >
+                                                                Edit Channel
+                                                            </span>
+                                                            <span
+                                                                onClick={() => {
+                                                                    setDeletingTextChannel(
+                                                                        textChannel.textChannelId
+                                                                    );
+                                                                }}
+                                                                className={cn(
+                                                                    "cursor-pointer w-full p-1 flex justify-start items-center text-red-500 text-sm font-bold font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                    fontSans.variable
+                                                                )}
+                                                            >
+                                                                Delete Channel
+                                                            </span>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                )}
                                             </div>
                                         )
                                 )}
@@ -1562,50 +1597,56 @@ const ServerDashboardNavigation = ({ serverId, setServerContent }) => {
                                                         voiceChannel.voiceChannelName
                                                     }
                                                 </div>
-                                                <Popover>
-                                                    <PopoverTrigger>
-                                                        <HiDotsVertical
-                                                            size={15}
-                                                            className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
-                                                        />
-                                                    </PopoverTrigger>
-                                                    <PopoverContent
-                                                        className={cn(
-                                                            "dark:text-white text-sm font-sans antialiased w-40",
-                                                            fontSans.variable
-                                                        )}
-                                                    >
-                                                        <span
-                                                            onClick={() => {
-                                                                setEditingVoiceChannel(
-                                                                    voiceChannel.voiceChannelId
-                                                                );
-                                                                setEditingVoiceChannelInput(
-                                                                    voiceChannel.voiceChannelName
-                                                                );
-                                                            }}
+                                                {(user.uid ===
+                                                    serverNavigationData.ownerUid ||
+                                                    serverNavigationData.adminList.includes(
+                                                        user.uid
+                                                    )) && (
+                                                    <Popover>
+                                                        <PopoverTrigger>
+                                                            <HiDotsVertical
+                                                                size={15}
+                                                                className="hover:text-slate-400 dark:hover:brightness-90 cursor-pointer"
+                                                            />
+                                                        </PopoverTrigger>
+                                                        <PopoverContent
                                                             className={cn(
-                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-black dark:text-white text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                "dark:text-white text-sm font-sans antialiased w-40",
                                                                 fontSans.variable
                                                             )}
                                                         >
-                                                            Edit Channel
-                                                        </span>
-                                                        <span
-                                                            onClick={() => {
-                                                                setDeletingVoiceChannel(
-                                                                    voiceChannel.voiceChannelId
-                                                                );
-                                                            }}
-                                                            className={cn(
-                                                                "cursor-pointer w-full p-1 flex justify-start items-center text-red-500 text-sm font-bold font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
-                                                                fontSans.variable
-                                                            )}
-                                                        >
-                                                            Delete Channel
-                                                        </span>
-                                                    </PopoverContent>
-                                                </Popover>
+                                                            <span
+                                                                onClick={() => {
+                                                                    setEditingVoiceChannel(
+                                                                        voiceChannel.voiceChannelId
+                                                                    );
+                                                                    setEditingVoiceChannelInput(
+                                                                        voiceChannel.voiceChannelName
+                                                                    );
+                                                                }}
+                                                                className={cn(
+                                                                    "cursor-pointer w-full p-1 flex justify-start items-center text-black dark:text-white text-sm font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                    fontSans.variable
+                                                                )}
+                                                            >
+                                                                Edit Channel
+                                                            </span>
+                                                            <span
+                                                                onClick={() => {
+                                                                    setDeletingVoiceChannel(
+                                                                        voiceChannel.voiceChannelId
+                                                                    );
+                                                                }}
+                                                                className={cn(
+                                                                    "cursor-pointer w-full p-1 flex justify-start items-center text-red-500 text-sm font-bold font-sans antialiased hover:bg-slate-100 dark:hover:bg-slate-700 rounded-sm ",
+                                                                    fontSans.variable
+                                                                )}
+                                                            >
+                                                                Delete Channel
+                                                            </span>
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                )}
                                             </div>
                                         )
                                 )}
@@ -1789,7 +1830,13 @@ const UserInfo = ({ isOwner, isAdmin, userUid, serverId }) => {
     );
 };
 
-const ServerDashboardContent = ({ serverId, serverContent }) => {
+const ServerDashboardContent = ({
+    serverId,
+    serverContent,
+    dashboardContent,
+    setDashboardContent,
+    setActivePage,
+}) => {
     interface Message {
         senderUid: string;
         isFileType: boolean;
@@ -1919,91 +1966,98 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         },
     });
 
-    const Filter = require("bad-words");
-    const filter = new Filter();
-
-    useEffect(() => {
-        setMentionOpen(false);
-        setMentionedUids([]);
-        setInputValue("");
-    }, [serverId, serverContent]);
-
     useEffect(() => {
         if (serverContent[0] === null) {
+            setMessages(null);
             setLoading(false);
             return;
         }
 
-        const getUserData = async (uid: string) => {
-            console.log("GET USER DATA");
-            if (!userData[uid]) {
-                const userDoc = await firestore
+        setNicknames({});
+        console.log(nicknames);
+
+        let unsubscribeNicknames = [];
+        let unsubscribeUserDocs = [];
+        const trackedUids = new Set();
+
+        const fetchUserData = (uid) => {
+            if (!trackedUids.has(uid)) {
+                trackedUids.add(uid);
+                const unsubscribe = firestore
                     .collection("users")
                     .doc(uid)
-                    .get();
-                if (userDoc.exists) {
-                    const userData = userDoc.data();
+                    .onSnapshot((userDoc) => {
+                        if (userDoc.exists) {
+                            const userData = userDoc.data();
+                            setUserData((prevData) => ({
+                                ...prevData,
+                                [uid]: userData, // Fully replace the user data for this UID
+                            }));
+                        } else {
+                            setUserData((prevData) => ({
+                                ...prevData,
+                                [uid]: null, // Handle case where userDoc doesn't exist
+                            }));
+                        }
+                    });
 
-                    await firestore
-                        .collection("users")
-                        .doc(uid)
-                        .collection("nicknames")
-                        .doc(serverId)
-                        .onSnapshot((snapshot) => {
-                            let nicknameList = nicknames;
-
-                            if (snapshot.exists) {
-                                console.log("NICKNAME EXISTS");
-
-                                if (nicknameList[uid]) {
-                                    nicknameList[uid] =
-                                        snapshot.data().nickname;
-                                } else {
-                                    nicknameList = {
-                                        ...nicknameList,
-                                        [uid]: snapshot.data().nickname,
-                                    };
-                                }
-
-                                setNicknames(nicknameList);
-                            }
-                        });
-
-                    setUserData((prevData) => ({
-                        ...prevData,
-                        [uid]: userData,
-                    }));
-                }
+                // Add to the list of unsubscribe functions
+                unsubscribeUserDocs.push(unsubscribe);
             }
         };
 
-        const getServerContentData = () => {
-            const unsubscribeServer = firestore
+        const setupNicknameListeners = (members) => {
+            const newUnsubscribeNicknames = members.map((memberUid) => {
+                return firestore
+                    .collection("users")
+                    .doc(memberUid)
+                    .collection("nicknames")
+                    .doc(serverId)
+                    .onSnapshot((snapshot) => {
+                        if (snapshot.exists) {
+                            setNicknames((prevNicknames) => ({
+                                ...prevNicknames,
+                                [memberUid]: snapshot.data().nickname,
+                            }));
+                        } else {
+                            setNicknames((prevNicknames) => ({
+                                ...prevNicknames,
+                                [memberUid]: null, // Handle case where nickname doesn't exist
+                            }));
+                        }
+                    });
+            });
+
+            unsubscribeNicknames = newUnsubscribeNicknames;
+        };
+
+        const getServerContentData = async () => {
+            const serverDoc = await firestore
                 .collection("servers")
                 .doc(serverId)
-                .onSnapshot((snapshot) => {
-                    const data = snapshot.data();
-                    if (data) {
-                        const currentMembers = data.memberList || [];
-                        currentMembers.forEach((memberUid) => {
-                            getUserData(memberUid);
-                        });
-
-                        setServerContentData({
-                            memberList: currentMembers,
-                            ownerUid: data.ownerUid || [],
-                            adminList: data.adminList || [],
-                            serverName: data.serverName,
-                        });
-                    }
-                    setLoading(false);
+                .get();
+            if (serverDoc.exists) {
+                const data = serverDoc.data();
+                const currentMembers = data.memberList || [];
+                currentMembers.forEach((memberUid) => {
+                    fetchUserData(memberUid);
                 });
 
-            return unsubscribeServer;
+                setServerContentData({
+                    memberList: currentMembers,
+                    ownerUid: data.ownerUid || [],
+                    adminList: data.adminList || [],
+                    serverName: data.serverName,
+                });
+
+                // Setup nickname listeners for the current members
+                setupNicknameListeners(currentMembers);
+            }
+            setLoading(false);
         };
 
         setLoading(true);
-        const unsubscribeServerData = getServerContentData();
+        getServerContentData();
 
         if (serverContent[0] === "textchannel") {
             const unsubscribeMessages = firestore
@@ -2015,25 +2069,23 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                 .orderBy("createdAt", "asc")
                 .onSnapshot(
                     (snapshot) => {
-                        const messagesList: Message[] = snapshot.docs.map(
-                            (messageDoc) => {
-                                const messageData = messageDoc.data();
-                                getUserData(messageData.senderUid);
-                                return {
-                                    senderUid: messageData.senderUid,
-                                    isFileType: messageData.isFileType,
-                                    isImageType: messageData.isImageType,
-                                    isVideoType: messageData.isVideoType,
-                                    fileName: messageData.fileName,
-                                    text: messageData.text,
-                                    createdAt: messageData.createdAt,
-                                    file: messageData.file,
-                                    messageId: messageDoc.id,
-                                    edited: messageData.edited,
-                                    mentions: messageData.mentions,
-                                };
-                            }
-                        );
+                        const messagesList = snapshot.docs.map((messageDoc) => {
+                            const messageData = messageDoc.data();
+                            fetchUserData(messageData.senderUid);
+                            return {
+                                senderUid: messageData.senderUid,
+                                isFileType: messageData.isFileType,
+                                isImageType: messageData.isImageType,
+                                isVideoType: messageData.isVideoType,
+                                fileName: messageData.fileName,
+                                text: messageData.text,
+                                createdAt: messageData.createdAt,
+                                file: messageData.file,
+                                messageId: messageDoc.id,
+                                edited: messageData.edited,
+                                mentions: messageData.mentions,
+                            };
+                        });
                         setMessages(messagesList);
                         setLoading(false);
                         console.log("Messages loaded:", messagesList);
@@ -2044,14 +2096,15 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                     }
                 );
 
-            console.log(userData);
-
             return () => {
-                unsubscribeServerData();
                 unsubscribeMessages();
+                // Cleanup nickname listeners
+                unsubscribeNicknames.forEach((unsubscribe) => unsubscribe());
+                // Cleanup user data listeners
+                unsubscribeUserDocs.forEach((unsubscribe) => unsubscribe());
             };
         } else if (serverContent[0] === "voicechannel") {
-            // Get Voice Channel data here
+            // Handle voice channel data fetching here
         }
     }, [serverContent, serverId]);
 
@@ -2109,10 +2162,16 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
             let transformedMessage = inputValue;
             verifiedMentions.forEach(({ mentionText, uid }) => {
                 console.log(mentionText, uid);
-                const mentionRegex = new RegExp(`@${mentionText}(?=\\s|\\b)`, 'g');
-                transformedMessage = transformedMessage.replace(mentionRegex, `@${uid}`);
+                const mentionRegex = new RegExp(
+                    `@${mentionText}(?=\\s|\\b)`,
+                    "g"
+                );
+                transformedMessage = transformedMessage.replace(
+                    mentionRegex,
+                    `@${uid}`
+                );
             });
-            
+
             const newMessage = {
                 senderUid: user.uid,
                 isFileType: false,
@@ -2169,7 +2228,8 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                         .collection("notifications")
                         .add({
                             title:
-                                userData[user.uid].username +
+                                (nicknames[user.uid] ||
+                                    userData[user.uid].username) +
                                 " - " +
                                 serverContentData.serverName +
                                 " #" +
@@ -2216,10 +2276,11 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     const handleMentionClick = (username, uid) => {
         const value = inputValue;
         const mentionIndex = currentMentionIndex;
+        console.log(nicknames[uid]);
         const newValue =
             value.slice(0, mentionIndex + 1) +
             (nicknames[uid] || username) +
-            " " +
+            "  " +
             value.slice(mentionIndex + 1);
         setInputValue(newValue);
 
@@ -2293,7 +2354,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
         nicknames
     ) => {
         const mentionRegex = /@([^\s@]+)/g; // Regex to match UID mentions prefixed with '@'
-    
+
         return messageText.replace(mentionRegex, (match, mentionUid) => {
             const user = userData[mentionUid];
             if (user) {
@@ -2529,25 +2590,32 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                                     .senderUid
                                                             ];
                                                         if (
-                                                            message.text &&
-                                                            message.text
-                                                                .toLowerCase()
-                                                                .includes(
-                                                                    searchMessageInput.toLowerCase()
-                                                                )
+                                                            (message.text &&
+                                                                message.text
+                                                                    .toLowerCase()
+                                                                    .includes(
+                                                                        searchMessageInput.toLowerCase()
+                                                                    )) ||
+                                                            (message.isFileType &&
+                                                                message.fileName
+                                                                    .toLowerCase()
+                                                                    .includes(
+                                                                        searchMessageInput.toLowerCase()
+                                                                    ))
                                                         )
                                                             return (
                                                                 <div
                                                                     key={index}
                                                                     className={cn(
                                                                         "flex items-start justify-start gap-4 w-full min-h-16 p-1 my-1",
-                                                                        message.mentions.some(
-                                                                            (
-                                                                                mention
-                                                                            ) =>
-                                                                                mention.uid ===
-                                                                                user.uid
-                                                                        )
+                                                                        message.mentions &&
+                                                                            message.mentions.some(
+                                                                                (
+                                                                                    mention
+                                                                                ) =>
+                                                                                    mention.uid ===
+                                                                                    user.uid
+                                                                            )
                                                                             ? "bg-violet-200 dark:bg-violet-950 rounded-xl shadow-sm"
                                                                             : ""
                                                                     )}
@@ -2577,6 +2645,15 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                                                 }
                                                                                 userUid={
                                                                                     message.senderUid
+                                                                                }
+                                                                                dashboardContent={
+                                                                                    dashboardContent
+                                                                                }
+                                                                                setDashboardContent={
+                                                                                    setDashboardContent
+                                                                                }
+                                                                                setActivePage={
+                                                                                    setActivePage
                                                                                 }
                                                                             ></UserProfilePopup>
                                                                         </PopoverContent>
@@ -2748,6 +2825,15 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                                                             }
                                                                                             key={
                                                                                                 index
+                                                                                            }
+                                                                                            dashboardContent={
+                                                                                                dashboardContent
+                                                                                            }
+                                                                                            setDashboardContent={
+                                                                                                setDashboardContent
+                                                                                            }
+                                                                                            setActivePage={
+                                                                                                setActivePage
                                                                                             }
                                                                                         ></MessageComponent>
                                                                                     </div>
@@ -3018,6 +3104,13 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                             <UserProfilePopup
                                                 serverId={serverId}
                                                 userUid={message.senderUid}
+                                                dashboardContent={
+                                                    dashboardContent
+                                                }
+                                                setDashboardContent={
+                                                    setDashboardContent
+                                                }
+                                                setActivePage={setActivePage}
                                             ></UserProfilePopup>
                                         </PopoverContent>
                                     </Popover>
@@ -3168,6 +3261,15 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                             serverId={serverId}
                                                             userData={userData}
                                                             key={index}
+                                                            dashboardContent={
+                                                                dashboardContent
+                                                            }
+                                                            setDashboardContent={
+                                                                setDashboardContent
+                                                            }
+                                                            setActivePage={
+                                                                setActivePage
+                                                            }
                                                         ></MessageComponent>
                                                     </div>
                                                 )}
@@ -3206,6 +3308,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                                     message.messageId
                                                                 );
                                                             }}
+                                                            className="text-red-600 font-bold"
                                                         >
                                                             Delete Message
                                                         </ContextMenuItem>
@@ -3222,6 +3325,7 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
                                                                     message.messageId
                                                                 );
                                                             }}
+                                                            className="text-red-600 font-bold"
                                                         >
                                                             Delete Message
                                                         </ContextMenuItem>
@@ -3423,7 +3527,15 @@ const ServerDashboardContent = ({ serverId, serverContent }) => {
     );
 };
 
-const MessageComponent = ({ message, userData, serverId, nicknames }) => {
+const MessageComponent = ({
+    message,
+    userData,
+    serverId,
+    nicknames,
+    dashboardContent,
+    setDashboardContent,
+    setActivePage,
+}) => {
     const Filter = require("bad-words");
     const filter = new Filter();
 
@@ -3459,6 +3571,9 @@ const MessageComponent = ({ message, userData, serverId, nicknames }) => {
                                 <UserProfilePopup
                                     serverId={serverId}
                                     userUid={mentionUid}
+                                    dashboardContent={dashboardContent}
+                                    setDashboardContent={setDashboardContent}
+                                    setActivePage={setActivePage}
                                 />
                             </PopoverContent>
                         </Popover>
@@ -3487,7 +3602,12 @@ const MessageComponent = ({ message, userData, serverId, nicknames }) => {
     return <div className="message-body">{renderedMessage}</div>;
 };
 
-const ServerDashboardInfo = ({ serverId }) => {
+const ServerDashboardInfo = ({
+    serverId,
+    dashboardContent,
+    setDashboardContent,
+    setActivePage,
+}) => {
     interface ServerInfoData {
         ownerUid: string;
         adminList: Array<string>;
@@ -3562,6 +3682,9 @@ const ServerDashboardInfo = ({ serverId }) => {
                             <UserProfilePopup
                                 serverId={serverId}
                                 userUid={serverInfoData.ownerUid}
+                                dashboardContent={dashboardContent}
+                                setDashboardContent={setDashboardContent}
+                                setActivePage={setActivePage}
                             ></UserProfilePopup>
                         </PopoverContent>
                     </Popover>
@@ -3586,6 +3709,11 @@ const ServerDashboardInfo = ({ serverId }) => {
                                     <UserProfilePopup
                                         serverId={serverId}
                                         userUid={admin}
+                                        dashboardContent={dashboardContent}
+                                        setDashboardContent={
+                                            setDashboardContent
+                                        }
+                                        setActivePage={setActivePage}
                                     ></UserProfilePopup>
                                 </PopoverContent>
                             </Popover>
@@ -3622,6 +3750,13 @@ const ServerDashboardInfo = ({ serverId }) => {
                                             <UserProfilePopup
                                                 serverId={serverId}
                                                 userUid={member}
+                                                dashboardContent={
+                                                    dashboardContent
+                                                }
+                                                setDashboardContent={
+                                                    setDashboardContent
+                                                }
+                                                setActivePage={setActivePage}
                                             ></UserProfilePopup>
                                         </PopoverContent>
                                     </Popover>

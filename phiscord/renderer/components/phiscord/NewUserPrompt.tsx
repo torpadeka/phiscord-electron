@@ -35,29 +35,45 @@ const formSchema = z.object({
         .max(5, { message: "Tag can only be 5 characters at max" }),
 });
 
-const createNewuser = async (username, tag) => {
-    console.log("createNewuser called"); // Logging to verify function call
-    const auth = firebase.auth() as unknown as Auth;
-    const { uid } = auth.currentUser;
-    const usersRef = firestore.collection("users");
-
-    const profilePicture = await storage.ref().child("phiscord_default_pfp.PNG").getDownloadURL();
-
-    // Do something with the form values.
-    // ✅ This will be type-safe and validated.
-    await usersRef.doc(uid).set({
-        uid: uid,
-        username: username,
-        tag: tag,
-        customStatus: null,
-        profilePicture: profilePicture,
-        useDarkMode: true,
-    });
-};
-
 const NewUserPrompt = () => {
     const [userCreated, setUserCreated] = useState(false);
+    const [error, setError] = useState("");
     const router = useRouter();
+
+    const createNewuser = async (username, tag) => {
+        console.log("createNewuser called"); // Logging to verify function call
+        const auth = firebase.auth() as unknown as Auth;
+        const { uid } = auth.currentUser;
+        const usersRef = firestore.collection("users");
+    
+        const profilePicture = await storage.ref().child("phiscord_default_pfp.PNG").getDownloadURL();
+    
+        const checkUnique = await usersRef.where("username", "==", username).where("tag", "==", tag).get();
+        
+        if(!checkUnique.empty){
+            setError("This username and tag has been taken!");
+            return;
+        }
+    
+        if(!/^(?!\s)(.*?)(?<!\s)$/.test(username)){
+            setError("No spaces in the in front or behind the username is allowed!");
+            return;
+        }
+
+        // Do something with the form values.
+        // ✅ This will be type-safe and validated.
+        await usersRef.doc(uid).set({
+            uid: uid,
+            username: username,
+            tag: tag,
+            customStatus: null,
+            profilePicture: profilePicture,
+            useDarkMode: true,
+            allowStrangerComms: true,
+        });
+
+        setUserCreated(true);
+    };
 
     const usernameForm = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
@@ -69,7 +85,6 @@ const NewUserPrompt = () => {
 
     async function onSubmit(values: z.infer<typeof formSchema>) {
         await createNewuser(values.username, values.tag);
-        setUserCreated(true);
     }
 
     const redirectHome = () => {
@@ -82,7 +97,7 @@ const NewUserPrompt = () => {
                 <Form {...usernameForm}>
                     <form
                         onSubmit={usernameForm.handleSubmit(onSubmit)}
-                        className="fade-in space-y-8"
+                        className="fade-in space-y-8 flex flex-col items-center justify-center"
                     >
                         <FormField
                             control={usernameForm.control}
@@ -119,6 +134,7 @@ const NewUserPrompt = () => {
                                 </FormItem>
                             )}
                         />
+                        <div className="text-red-500 font-bold w-48 text-center items-center justify-center">{error}</div>
                         <Button className="w-full" type="submit">
                             Submit
                         </Button>

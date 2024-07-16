@@ -20,6 +20,7 @@ const HomePage = () => {
     const auth = firebase.auth() as unknown as Auth;
     const [firebaseUser] = useAuthState(auth);
     const [activePage, setActivePage] = useState(["dashboard", null]);
+    const [dashboardContent, setDashboardContent] = useState(["welcome", null]);
 
     const [channelName, setChannelName] = useState(null);
     const [inCall, setInCall] = useState(false);
@@ -210,12 +211,17 @@ const HomePage = () => {
                         unmuteVideo={unmuteVideo}
                         deafenAudio={deafenAudio}
                         undeafenAudio={undeafenAudio}
+                        setActivePage={setActivePage}
+                        setContent={setDashboardContent}
+                        content={dashboardContent}
                     />
                 )}
                 {activePage[0] === "server" && (
                     <ServerDashboard
                         setActivePage={setActivePage}
                         serverId={activePage[1]}
+                        setDashboardContent={setDashboardContent}
+                        dashboardContent={dashboardContent}
                     />
                 )}
                 <UserProfileBox />
