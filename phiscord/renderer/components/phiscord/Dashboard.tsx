@@ -12,6 +12,7 @@ import { FaFile, FaPlus } from "react-icons/fa6";
 import { IoChatboxEllipsesSharp } from "react-icons/io5";
 import { FaSearch, FaUserFriends } from "react-icons/fa";
 import { MdCall, MdCallEnd, MdEmojiEmotions } from "react-icons/md";
+import { BsCameraVideoFill, BsCameraVideoOffFill } from "react-icons/bs";
 
 import EmojiPicker from "emoji-picker-react";
 import { useDropzone } from "react-dropzone";
@@ -74,7 +75,11 @@ const Dashboard = ({
     return (
         <>
             <div className="flex w-full h-screen pl-20 pt-14">
-                <DashboardNavigation content={content} setContent={setContent} inCall={inCall} />
+                <DashboardNavigation
+                    content={content}
+                    setContent={setContent}
+                    inCall={inCall}
+                />
                 <DashboardContent
                     content={content}
                     setContent={setContent}
@@ -90,6 +95,8 @@ const Dashboard = ({
                     muteVideo={muteVideo}
                     muteAudio={muteAudio}
                     unmuteAudio={unmuteAudio}
+                    deafenAudio={deafenAudio}
+                    undeafenAudio={undeafenAudio}
                 />
                 <DashboardInfo
                     content={content}
@@ -126,7 +133,7 @@ const DashboardNavigation = ({ content, setContent, inCall }) => {
 
     useEffect(() => {
         setSelectedConversation(content[1]);
-    }, [content])
+    }, [content]);
 
     useEffect(() => {
         setNewChatError("");
@@ -666,10 +673,25 @@ const ConversationNavigationItem = ({
                             setContent(["conversation", userUid]);
                         }}
                     >
-                        <Avatar className="bg-white">
-                            <AvatarImage src={userData[3]} />
-                            <AvatarFallback>{}</AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                            <Avatar className="bg-white">
+                                <AvatarImage src={userData[3]} />
+                                <AvatarFallback>{}</AvatarFallback>
+                            </Avatar>
+                            {userRealtimeStatus === "Online" && (
+                                <div className="absolute bottom-0 right-0 flex items-center justify-center w-3 h-3 bg-slate-100 dark:bg-slate-900 rounded-full">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                </div>
+                            )}
+                            {userRealtimeStatus === "Offline" && (
+                                <div className="absolute bottom-0 right-0 flex items-center justify-center w-3 h-3 bg-slate-100 dark:bg-slate-900 rounded-full">
+                                    <div className="w-2 h-2 bg-slate-500 rounded-full flex items-center justify-center">
+                                        <div className="w-1 h-1 bg-slate-100 dark:bg-slate-900 rounded-full"></div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
                         <div className="flex flex-col justify-center items-start">
                             <span className="font-semibold max-w-44 overflow-x-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
                                 {userData[0]}
@@ -709,6 +731,8 @@ const DashboardContent = ({
     muteVideo,
     muteAudio,
     unmuteAudio,
+    deafenAudio,
+    undeafenAudio,
 }) => {
     interface Message {
         senderUid: string;
@@ -747,6 +771,70 @@ const DashboardContent = ({
     const [searchingMessage, setSearchingMessage] = useState(false);
     const [searchMessageInput, setSearchMessageInput] = useState("");
     const dragCounter = useRef(0);
+
+    const localVideoRef = useRef(null);
+    const remoteVideoRefs = useRef({});
+
+    const [isCameraOn, setIsCameraOn] = useState(false);
+
+    useEffect(() => {
+        console.log("RENDERING LOCAL 1");
+        if (localTracks.cameraTrack && localVideoRef.current) {
+            localTracks.cameraTrack.play(localVideoRef.current);
+        }
+        console.log("RENDERING LOCAL 2");
+    }, [localTracks.cameraTrack, conversationId]);
+
+    useEffect(() => {
+        console.log("Users array:", users);
+        users.forEach((user) => {
+            if (user.videoTrack && remoteVideoRefs.current[user.uid]) {
+                console.log("Playing remote video for user:", user.uid);
+                user.videoTrack.play(remoteVideoRefs.current[user.uid]);
+            }
+        });
+    }, [users, conversationId]);
+
+    useEffect(() => {
+        const getUserMuteDeafen = async () => {
+            const userMuteDatabaseRef = database.ref(
+                `userState/${user.uid}/isMute`
+            );
+
+            const userDeafenDatabaseRef = database.ref(
+                `userState/${user.uid}/isDeafen`
+            );
+
+            const handleMuteUpdate = (snapshot) => {
+                console.log("MUTE UPDATE: ", snapshot.val());
+                if (snapshot.val() === true) {
+                    muteAudio();
+                } else {
+                    unmuteAudio();
+                }
+            };
+
+            const handleDeafenUpdate = (snapshot) => {
+                console.log("DEAFEN UPDATE: ", snapshot.val());
+                if (snapshot.val() === true) {
+                    deafenAudio();
+                } else {
+                    undeafenAudio();
+                }
+            };
+
+            userMuteDatabaseRef.on("value", handleMuteUpdate);
+            userDeafenDatabaseRef.on("value", handleDeafenUpdate);
+
+            // Clean up the listener when the component unmounts
+            return () => {
+                userMuteDatabaseRef.off("value", handleMuteUpdate);
+                userDeafenDatabaseRef.off("value", handleDeafenUpdate);
+            };
+        };
+
+        getUserMuteDeafen();
+    }, []);
 
     useEffect(() => {
         const handleDragEnter = (e) => {
@@ -827,27 +915,6 @@ const DashboardContent = ({
 
     const Filter = require("bad-words");
     const filter = new Filter();
-
-    const localVideoRef = useRef(null);
-    const remoteVideoRefs = useRef({});
-
-    useEffect(() => {
-        console.log("RENDERING LOCAL 1");
-        if (localTracks.cameraTrack && localVideoRef.current) {
-            localTracks.cameraTrack.play(localVideoRef.current);
-        }
-        console.log("RENDERING LOCAL 2");
-    }, [localTracks.cameraTrack, conversationId]);
-
-    useEffect(() => {
-        console.log("Users array:", users);
-        users.forEach((user) => {
-            if (user.videoTrack && remoteVideoRefs.current[user.uid]) {
-                console.log("Playing remote video for user:", user.uid);
-                user.videoTrack.play(remoteVideoRefs.current[user.uid]);
-            }
-        });
-    }, [users, conversationId]);
 
     useEffect(() => {
         if (content[0] !== "conversation") {
@@ -1123,14 +1190,14 @@ const DashboardContent = ({
             console.log(receiverUid);
 
             firestore
-            .collection("users")
-            .doc(receiverUid)
-            .collection("notifications")
-            .add({
-                title: userData[user.uid].username,
-                body: newMessage.text,
-                icon: userData[user.uid].profilePicture,
-            });
+                .collection("users")
+                .doc(receiverUid)
+                .collection("notifications")
+                .add({
+                    title: userData[user.uid].username,
+                    body: newMessage.text,
+                    icon: userData[user.uid].profilePicture,
+                });
         }
     };
 
@@ -1211,30 +1278,62 @@ const DashboardContent = ({
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
             {inCall && channelName === conversationId && (
                 <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-300 border-slate-100 border-y-4 shadow-md flex justify-center items-center flex-col">
-                    <div className="local-video relative w-[328px] h-[188px] rounded-2xl border-slate-300 border-4">
-                        <div
-                            ref={localVideoRef}
-                            className="video-player z-50 rounded-2xl"
-                        ></div>
-                        <div className="remote-videos">
-                        {users.map((user) => (
+                    <div className="flex gap-4 items-center justify-center">
+                        <div className="relative local-video">
                             <div
-                                key={user.uid}
-                                className="relative w-64 h-[148px] rounded-2xl border-slate-300 border-4"
-                            >
-                                <div
-                                    ref={(el) => {
-                                        remoteVideoRefs.current[user.uid] = el;
-                                    }}
-                                    className="video-player"
-                                ></div>
-                            </div>
-                        ))}
+                                ref={localVideoRef}
+                                className="video-player z-50 rounded-2xl"
+                            ></div>
+                        </div>
+                        <div className="remote-videos">
+                            {users.map((remoteUser) => {
+                                console.log(users);
+                                if (remoteUser !== user.uid) {
+                                    return (
+                                        <div className="relative">
+                                            <div
+                                                key={remoteUser.uid}
+                                                className="rounded-xl bg-black absolute top-0 w-full h-full"
+                                            ></div>
+                                            <div
+                                                ref={(el) => {
+                                                    remoteVideoRefs.current[
+                                                        remoteUser.uid
+                                                    ] = el;
+                                                }}
+                                                className="video-player rounded-2xl"
+                                            ></div>
+                                        </div>
+                                    );
+                                }
+                                return null;
+                            })}
+                        </div>
                     </div>
-                    </div>
+
                     <div className="flex items-center justify-center w-full gap-2">
-                        <Button onClick={unmuteVideo}>Camera On</Button>
-                        <Button onClick={muteVideo}>Camera Off</Button>
+                        {!isCameraOn && (
+                            <div
+                                onClick={() => {
+                                    unmuteVideo();
+                                    setIsCameraOn(true);
+                                }}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-200 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                            >
+                                <BsCameraVideoFill size={20} />
+                            </div>
+                        )}
+                        {isCameraOn && (
+                            <div
+                                onClick={() => {
+                                    muteVideo();
+                                    setIsCameraOn(false);
+                                }}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-200 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                            >
+                                <BsCameraVideoOffFill size={20} />
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -1275,8 +1374,11 @@ const DashboardContent = ({
                             <DialogTrigger>
                                 <div
                                     onClick={() => setSearchingMessage(true)}
-                                    className={cn("shadow-md transition-colors cursor-pointer hover:brightness-150 flex items-center justify-center w-10 h-10 bg-slate-600 rounded-full dark:bg-slate-600 fixed left-[376px] z-50", 
-                                        inCall && channelName === conversationId ? "top-[355px]" : "top-16"
+                                    className={cn(
+                                        "shadow-md transition-colors cursor-pointer hover:brightness-150 flex items-center justify-center w-10 h-10 bg-slate-600 rounded-full dark:bg-slate-600 fixed left-[376px] z-50",
+                                        inCall && channelName === conversationId
+                                            ? "top-[355px]"
+                                            : "top-16"
                                     )}
                                 >
                                     <FaSearch
@@ -2328,21 +2430,37 @@ const DashboardInfo = ({
                     </div>
                     {conversationId && (
                         <div className="w-full flex items-center justify-center gap-4">
-                            <div
-                                onClick={() => {
-                                    setChannelName(conversationId);
-                                    setInCall(true);
-                                }}
-                                className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
-                            >
-                                <MdCall />
-                            </div>
-                            <div
-                                onClick={leaveCall}
-                                className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
-                            >
-                                <MdCallEnd />
-                            </div>
+                            {!(inCall && channelName === conversationId) && (
+                                <div
+                                    onClick={() => {
+                                        if (
+                                            !(
+                                                inCall &&
+                                                channelName === conversationId
+                                            )
+                                        ) {
+                                            setChannelName(conversationId);
+                                            setInCall(true);
+                                        }
+                                    }}
+                                    className={cn(
+                                        "w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer",
+                                        inCall && channelName === conversationId
+                                            ? "cursor-not-allowed "
+                                            : ""
+                                    )}
+                                >
+                                    <MdCall />
+                                </div>
+                            )}
+                            {inCall && channelName === conversationId && (
+                                <div
+                                    onClick={leaveCall}
+                                    className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                                >
+                                    <MdCallEnd />
+                                </div>
+                            )}
                         </div>
                     )}
                 </>

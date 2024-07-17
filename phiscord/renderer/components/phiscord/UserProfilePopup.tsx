@@ -502,7 +502,7 @@ const UserProfilePopup = ({
                         <div className="relative">
                             <Avatar className="bg-white w-20 h-20">
                                 <AvatarImage src={userData[2]} />
-                                <AvatarFallback>{`:(`}</AvatarFallback>
+                                <AvatarFallback>{}</AvatarFallback>
                             </Avatar>
                             {userRealtimeStatus === "Online" && (
                                 <div className="absolute bottom-0 right-0 flex items-center justify-center w-6 h-6 bg-slate-100 dark:bg-slate-900 rounded-full">
@@ -528,13 +528,13 @@ const UserProfilePopup = ({
                             </span>
                             {nickname && (
                                 <span
-                                className={cn(
-                                    "dark:text-white text-base font-sans font-semibold antialiased max-w-48 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar",
-                                    fontSans.variable
-                                )}
-                            >
-                                {userData[0]}
-                            </span>
+                                    className={cn(
+                                        "dark:text-white text-base font-sans font-semibold antialiased max-w-48 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar",
+                                        fontSans.variable
+                                    )}
+                                >
+                                    {userData[0]}
+                                </span>
                             )}
                             <span
                                 className={cn(
@@ -580,49 +580,51 @@ const UserProfilePopup = ({
                                 BLOCKED
                             </div>
                         )}
-                        {isBlocked !== null && isBlocked === false && !(userUid === user.uid) && (
-                            <div className="w-full flex flex-col items-center justify-center gap-1">
-                                <Button
-                                    onClick={handleCreateConversation}
-                                    className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
-                                >
-                                    <span
-                                        className={cn(
-                                            "text-sm font-sans antialiased",
-                                            fontSans.variable
-                                        )}
+                        {isBlocked !== null &&
+                            isBlocked === false &&
+                            !(userUid === user.uid) && (
+                                <div className="w-full flex flex-col items-center justify-center gap-1">
+                                    <Button
+                                        onClick={handleCreateConversation}
+                                        className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
                                     >
-                                        Chat
-                                    </span>
-                                </Button>
-                                <Button
-                                    onClick={handleAddFriend}
-                                    className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
-                                >
-                                    <span
-                                        className={cn(
-                                            "text-sm font-sans antialiased",
-                                            fontSans.variable
-                                        )}
+                                        <span
+                                            className={cn(
+                                                "text-sm font-sans antialiased",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Chat
+                                        </span>
+                                    </Button>
+                                    <Button
+                                        onClick={handleAddFriend}
+                                        className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
                                     >
-                                        Add Friend
-                                    </span>
-                                </Button>
-                                <Button
-                                    onClick={handleBlock}
-                                    className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
-                                >
-                                    <span
-                                        className={cn(
-                                            "text-sm font-sans antialiased",
-                                            fontSans.variable
-                                        )}
+                                        <span
+                                            className={cn(
+                                                "text-sm font-sans antialiased",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Add Friend
+                                        </span>
+                                    </Button>
+                                    <Button
+                                        onClick={handleBlock}
+                                        className="w-28 bg-slate-900 text-white hover:text-black hover:bg-slate-200 rounded-xl gap-2 fill-white hover:fill-black"
                                     >
-                                        Block
-                                    </span>
-                                </Button>
-                            </div>
-                        )}
+                                        <span
+                                            className={cn(
+                                                "text-sm font-sans antialiased",
+                                                fontSans.variable
+                                            )}
+                                        >
+                                            Block
+                                        </span>
+                                    </Button>
+                                </div>
+                            )}
                     </>
                 )}
                 {!userData && (

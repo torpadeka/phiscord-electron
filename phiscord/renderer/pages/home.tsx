@@ -15,7 +15,6 @@ import ServerDashboard from "@/components/phiscord/ServerDashboard";
 import Dashboard from "@/components/phiscord/Dashboard";
 
 const HomePage = () => {
-
     const appId = "97053747cb414a02bb27de8e55549466";
     const auth = firebase.auth() as unknown as Auth;
     const [firebaseUser] = useAuthState(auth);
@@ -42,14 +41,15 @@ const HomePage = () => {
                         const notificationData = change.doc.data();
                         showNotification(notificationData);
                         firestore
-                        .collection("users")
-                        .doc(firebaseUser.uid)
-                        .collection("notifications")
-                        .doc(change.doc.id).delete();
+                            .collection("users")
+                            .doc(firebaseUser.uid)
+                            .collection("notifications")
+                            .doc(change.doc.id)
+                            .delete();
                     }
                 });
             });
-    
+
         return () => unsubscribe();
     }, [firebaseUser]);
 
@@ -77,12 +77,14 @@ const HomePage = () => {
     };
 
     const muteAudio = () => {
+        console.log("muting audio");
         if (localTracks.microphoneTrack) {
             localTracks.microphoneTrack.setMuted(true);
         }
     };
 
     const unmuteAudio = () => {
+        console.log("unmuting audio");
         if (localTracks.microphoneTrack) {
             localTracks.microphoneTrack.setMuted(false);
         }
@@ -100,19 +102,21 @@ const HomePage = () => {
         }
     };
 
-    const deafenAudio = (users) => {
+    const deafenAudio = () => {
+        console.log("deafening audio");
         users.forEach((user) => {
             if (user.audioTrack) {
-                user.audioTrack.setEnabled(false); // Mute the remote audio track
+                user.audioTrack.setMuted(true); // Mute the remote audio track
             }
         });
     };
 
     // Function to Unmute Remote Audio Tracks
-    const undeafenAudio = (users) => {
+    const undeafenAudio = () => {
+        console.log("undeafening audio");
         users.forEach((user) => {
             if (user.audioTrack) {
-                user.audioTrack.setEnabled(true); // Unmute the remote audio track
+                user.audioTrack.setMuted(false); // Unmute the remote audio track
             }
         });
     };
@@ -126,19 +130,27 @@ const HomePage = () => {
 
                 const handleUserPublished = async (user, mediaType) => {
                     await client.subscribe(user, mediaType);
-                    if (mediaType === "video") {
-                        setUsers((prevUsers) => [
-                            ...prevUsers,
-                            {
-                                ...user,
-                                firebaseUid: firebaseUser.uid, // Add Firebase UID here
-                                videoTrack: user.videoTrack, // Ensure videoTrack is stored
-                            },
-                        ]);
-                    }
-                    if (mediaType === "audio") {
-                        user.audioTrack.play();
-                    }
+                    setUsers((prevUsers) => {
+                        const userExists = prevUsers.some(
+                            (prevUser) => prevUser.uid === user.uid
+                        );
+                        if (!userExists) {
+                            return [...prevUsers, { ...user }];
+                        }
+                        return prevUsers.map((prevUser) =>
+                            prevUser.uid === user.uid
+                                ? {
+                                      ...prevUser,
+                                      ...(mediaType === "video" && {
+                                          videoTrack: user.videoTrack,
+                                      }),
+                                      ...(mediaType === "audio" && {
+                                          audioTrack: user.audioTrack,
+                                      }),
+                                  }
+                                : prevUser
+                        );
+                    });
                 };
 
                 const handleUserUnpublished = (user, mediaType) => {
@@ -222,9 +234,26 @@ const HomePage = () => {
                         serverId={activePage[1]}
                         setDashboardContent={setDashboardContent}
                         dashboardContent={dashboardContent}
+                        inCall={inCall}
+                        setInCall={setInCall}
+                        channelName={channelName}
+                        setChannelName={setChannelName}
+                        users={users}
+                        localTracks={localTracks}
+                        leaveCall={leaveCall}
+                        muteAudio={muteAudio}
+                        unmuteAudio={unmuteAudio}
+                        muteVideo={muteVideo}
+                        unmuteVideo={unmuteVideo}
+                        deafenAudio={deafenAudio}
+                        undeafenAudio={undeafenAudio}
                     />
                 )}
-                <UserProfileBox />
+                <UserProfileBox
+                    setActivePage={setActivePage}
+                    setDashboardContent={setDashboardContent}
+                    dashboardContent={dashboardContent}
+                />
             </div>
         </div>
     );

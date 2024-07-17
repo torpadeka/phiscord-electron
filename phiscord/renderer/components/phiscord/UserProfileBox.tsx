@@ -27,7 +27,11 @@ const fontSans = FontSans({
     variable: "--font-sans",
 });
 
-const UserProfileBox = () => {
+const UserProfileBox = ({
+    dashboardContent,
+    setDashboardContent,
+    setActivePage,
+}) => {
     const auth = firebase.auth() as unknown as Auth;
     const [user, loading, error] = useAuthState(auth);
     const [userData, setUserData] = useState(null);
@@ -102,11 +106,14 @@ const UserProfileBox = () => {
             {userData !== null && (
                 <>
                     <Popover>
-                        <PopoverTrigger>
+                        <PopoverTrigger className="relative">
                             <Avatar className="bg-white">
                                 <AvatarImage src={userData[3]} />
                                 <AvatarFallback>{}</AvatarFallback>
                             </Avatar>
+                            <div className="absolute bottom-0 right-0 flex items-center justify-center w-3 h-3 bg-slate-100 dark:bg-slate-900 rounded-full">
+                                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            </div>
                         </PopoverTrigger>
                         <PopoverContent
                             sideOffset={10}
@@ -115,6 +122,9 @@ const UserProfileBox = () => {
                             <UserProfilePopup
                                 serverId={null}
                                 userUid={user.uid}
+                                dashboardContent={dashboardContent}
+                                setDashboardContent={setDashboardContent}
+                                setActivePage={setActivePage}
                             ></UserProfilePopup>
                         </PopoverContent>
                     </Popover>
@@ -174,6 +184,7 @@ const UserProfileBox = () => {
                                 className="hover:scale-110 transition-all cursor-pointer"
                                 onClick={() => {
                                     setIsMute(true);
+
                                 }}
                                 size="25"
                             />

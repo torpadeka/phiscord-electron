@@ -41,7 +41,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "../ui/dialog";
-import { MdEmojiEmotions } from "react-icons/md";
+import { MdCall, MdCallEnd, MdEmojiEmotions } from "react-icons/md";
 import EmojiPicker from "emoji-picker-react";
 import { Button } from "../ui/button";
 import { IoPrismSharp } from "react-icons/io5";
@@ -52,6 +52,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Toaster } from "../ui/toaster";
 import { useDropzone } from "react-dropzone";
 import { FaSearch } from "react-icons/fa";
+import { BsCameraVideoFill, BsCameraVideoOffFill } from "react-icons/bs";
 
 const fontSans = FontSans({
     subsets: ["latin"],
@@ -63,6 +64,19 @@ const ServerDashboard = ({
     serverId,
     setDashboardContent,
     dashboardContent,
+    inCall,
+    setInCall,
+    channelName,
+    setChannelName,
+    users,
+    localTracks,
+    leaveCall,
+    unmuteVideo,
+    muteVideo,
+    muteAudio,
+    unmuteAudio,
+    deafenAudio,
+    undeafenAudio,
 }) => {
     const auth = firebase.auth() as unknown as Auth;
     const [user] = useAuthState(auth);
@@ -93,6 +107,19 @@ const ServerDashboard = ({
                 dashboardContent={dashboardContent}
                 setDashboardContent={setDashboardContent}
                 setActivePage={setActivePage}
+                inCall={inCall}
+                setInCall={setInCall}
+                channelName={channelName}
+                setChannelName={setChannelName}
+                users={users}
+                localTracks={localTracks}
+                leaveCall={leaveCall}
+                unmuteVideo={unmuteVideo}
+                muteVideo={muteVideo}
+                muteAudio={muteAudio}
+                unmuteAudio={unmuteAudio}
+                deafenAudio={deafenAudio}
+                undeafenAudio={undeafenAudio}
             ></ServerDashboardContent>
             <ServerDashboardInfo
                 serverId={serverId}
@@ -1836,6 +1863,19 @@ const ServerDashboardContent = ({
     dashboardContent,
     setDashboardContent,
     setActivePage,
+    inCall,
+    setInCall,
+    channelName,
+    setChannelName,
+    users,
+    localTracks,
+    leaveCall,
+    unmuteVideo,
+    muteVideo,
+    muteAudio,
+    unmuteAudio,
+    deafenAudio,
+    undeafenAudio,
 }) => {
     interface Message {
         senderUid: string;
@@ -1886,6 +1926,70 @@ const ServerDashboardContent = ({
 
     const [isDropzoneVisible, setDropzoneVisible] = useState(false);
     const dragCounter = useRef(0);
+
+    const localVideoRef = useRef(null);
+    const remoteVideoRefs = useRef({});
+
+    const [isCameraOn, setIsCameraOn] = useState(false);
+
+    useEffect(() => {
+        console.log("RENDERING LOCAL 1");
+        if (localTracks.cameraTrack && localVideoRef.current) {
+            localTracks.cameraTrack.play(localVideoRef.current);
+        }
+        console.log("RENDERING LOCAL 2");
+    }, [localTracks.cameraTrack, serverId]);
+
+    useEffect(() => {
+        console.log("Users array:", users);
+        users.forEach((user) => {
+            if (user.videoTrack && remoteVideoRefs.current[user.uid]) {
+                console.log("Playing remote video for user:", user.uid);
+                user.videoTrack.play(remoteVideoRefs.current[user.uid]);
+            }
+        });
+    }, [users, serverId]);
+
+    useEffect(() => {
+        const getUserMuteDeafen = async () => {
+            const userMuteDatabaseRef = database.ref(
+                `userState/${user.uid}/isMute`
+            );
+
+            const userDeafenDatabaseRef = database.ref(
+                `userState/${user.uid}/isDeafen`
+            );
+
+            const handleMuteUpdate = (snapshot) => {
+                console.log("MUTE UPDATE: ", snapshot.val());
+                if (snapshot.val() === true) {
+                    muteAudio();
+                } else {
+                    unmuteAudio();
+                }
+            };
+
+            const handleDeafenUpdate = (snapshot) => {
+                console.log("DEAFEN UPDATE: ", snapshot.val());
+                if (snapshot.val() === true) {
+                    deafenAudio();
+                } else {
+                    undeafenAudio();
+                }
+            };
+
+            userMuteDatabaseRef.on("value", handleMuteUpdate);
+            userDeafenDatabaseRef.on("value", handleDeafenUpdate);
+
+            // Clean up the listener when the component unmounts
+            return () => {
+                userMuteDatabaseRef.off("value", handleMuteUpdate);
+                userDeafenDatabaseRef.off("value", handleDeafenUpdate);
+            };
+        };
+
+        getUserMuteDeafen();
+    }, []);
 
     useEffect(() => {
         const handleDragEnter = (e) => {
@@ -2104,7 +2208,6 @@ const ServerDashboardContent = ({
                 unsubscribeUserDocs.forEach((unsubscribe) => unsubscribe());
             };
         } else if (serverContent[0] === "voicechannel") {
-            // Handle voice channel data fetching here
         }
     }, [serverContent, serverId]);
 
@@ -2517,6 +2620,101 @@ const ServerDashboardContent = ({
                             );
                         })}
                     </ScrollArea>
+                </div>
+            )}
+            {serverContent[0] === "voicechannel" && (
+                <div className="flex flex-col items-center justify-between w-full h-full p-6">
+                    <div className="w-full h-full grid">
+                        {inCall && channelName === serverContent[1] && (
+                            <div className="flex gap-4 items-center justify-center">
+                                <div className="relative local-video">
+                                    <div
+                                        ref={localVideoRef}
+                                        className="video-player z-50 rounded-2xl"
+                                    ></div>
+                                </div>
+                                <div className="remote-videos">
+                                    {users.map((remoteUser) => {
+                                        console.log(users);
+                                        if (remoteUser !== user.uid) {
+                                            return (
+                                                <div className="relative">
+                                                    <div
+                                                        key={remoteUser.uid}
+                                                        className="rounded-xl bg-black absolute top-0 w-full h-full"
+                                                    ></div>
+                                                    <div
+                                                        ref={(el) => {
+                                                            remoteVideoRefs.current[
+                                                                remoteUser.uid
+                                                            ] = el;
+                                                        }}
+                                                        className="video-player rounded-2xl"
+                                                    ></div>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex items-center justify-center w-full gap-2">
+                        {!(inCall && channelName === serverContent[1]) && (
+                            <div
+                                onClick={() => {
+                                    if (
+                                        !(
+                                            inCall &&
+                                            channelName === serverContent[1]
+                                        )
+                                    ) {
+                                        setChannelName(serverContent[1]);
+                                        setInCall(true);
+                                    }
+                                }}
+                                className={cn(
+                                    "w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer",
+                                    inCall && channelName === serverContent[1]
+                                        ? "cursor-not-allowed "
+                                        : ""
+                                )}
+                            >
+                                <MdCall />
+                            </div>
+                        )}
+                        {inCall && channelName === serverContent[1] && (
+                            <div
+                                onClick={leaveCall}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                            >
+                                <MdCallEnd />
+                            </div>
+                        )}
+                        {inCall && !isCameraOn && (
+                            <div
+                                onClick={() => {
+                                    unmuteVideo();
+                                    setIsCameraOn(true);
+                                }}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                            >
+                                <BsCameraVideoFill size={20} />
+                            </div>
+                        )}
+                        {inCall && isCameraOn && (
+                            <div
+                                onClick={() => {
+                                    muteVideo();
+                                    setIsCameraOn(false);
+                                }}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-300 dark:bg-slate-800 hover:brightness-150 rounded-3xl shadow-lg hover:rounded-xl transition-all duration-75 cursor-pointer"
+                            >
+                                <BsCameraVideoOffFill size={20} />
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
             {serverContent[0] === "textchannel" && messages && (
@@ -3885,10 +4083,25 @@ const ServerInfoUserItem = ({ isOwner, isAdmin, userUid, serverId }) => {
     return (
         userData && (
             <div className="flex w-full min-h-12 items-center justify-start mx-4 px-2 py-2 gap-3 dark:hover:bg-slate-800 hover:bg-slate-300 rounded-xl">
-                <Avatar className="bg-white">
-                    <AvatarImage src={userData[3]} />
-                    <AvatarFallback>{}</AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                    <Avatar className="bg-white">
+                        <AvatarImage src={userData[3]} />
+                        <AvatarFallback>{}</AvatarFallback>
+                    </Avatar>
+                    {userRealtimeStatus === "Online" && (
+                        <div className="absolute bottom-0 right-0 flex items-center justify-center w-3 h-3 bg-slate-100 dark:bg-slate-900 rounded-full">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        </div>
+                    )}
+                    {userRealtimeStatus === "Offline" && (
+                        <div className="absolute bottom-0 right-0 flex items-center justify-center w-3 h-3 bg-slate-100 dark:bg-slate-900 rounded-full">
+                            <div className="w-2 h-2 bg-slate-500 rounded-full flex items-center justify-center">
+                                <div className="w-1 h-1 bg-slate-100 dark:bg-slate-900 rounded-full"></div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 <div className="flex flex-col justify-center items-start text-black dark:text-white">
                     <span
                         ref={nameRef}
