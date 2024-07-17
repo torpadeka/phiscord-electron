@@ -1277,7 +1277,7 @@ const DashboardContent = ({
     return (
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
             {inCall && channelName === conversationId && (
-                <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-300 border-slate-100 border-y-4 shadow-md flex justify-center items-center flex-col">
+                <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-300 dark:bg-slate-600 border-slate-100 dark:border-slate-700 border-y-4 shadow-md flex justify-center items-center flex-col">
                     <div className="flex gap-4 items-center justify-center">
                         <div className="relative local-video">
                             <div
