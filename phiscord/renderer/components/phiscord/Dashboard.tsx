@@ -878,6 +878,9 @@ const DashboardContent = ({
             }
         };
 
+        getUserData(content[1]);
+        getUserData(user.uid);
+
         console.log(
             "Fetching messages for conversation with user:",
             content[1]
@@ -908,7 +911,6 @@ const DashboardContent = ({
                                         (messageDoc) => {
                                             const messageData =
                                                 messageDoc.data();
-                                            getUserData(messageData.senderUid);
                                             return {
                                                 senderUid:
                                                     messageData.senderUid,
@@ -1120,16 +1122,15 @@ const DashboardContent = ({
             console.log(uids[1]);
             console.log(receiverUid);
 
-            // Add Notifications
             firestore
-                .collection("users")
-                .doc(receiverUid)
-                .collection("notifications")
-                .add({
-                    title: userData[user.uid].username,
-                    body: newMessage.text,
-                    icon: userData[user.uid].profilePicture,
-                });
+            .collection("users")
+            .doc(receiverUid)
+            .collection("notifications")
+            .add({
+                title: userData[user.uid].username,
+                body: newMessage.text,
+                icon: userData[user.uid].profilePicture,
+            });
         }
     };
 
@@ -1209,15 +1210,13 @@ const DashboardContent = ({
     return (
         <div className="h-full w-full bg-slate-200 dark:bg-slate-900 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar">
             {inCall && channelName === conversationId && (
-                <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-400 flex justify-center items-center flex-col">
+                <div className="sticky top-0 z-50 w-full h-72 gap-4 bg-slate-300 border-slate-100 border-y-4 shadow-md flex justify-center items-center flex-col">
                     <div className="local-video relative w-[328px] h-[188px] rounded-2xl border-slate-300 border-4">
                         <div
                             ref={localVideoRef}
-                            className="video-player z-50 rounded-xl"
+                            className="video-player z-50 rounded-2xl"
                         ></div>
-                        <div className="w-full h-full absolute bg-slate-100 top-0 rounded-xl"></div>
-                    </div>
-                    <div className="remote-videos">
+                        <div className="remote-videos">
                         {users.map((user) => (
                             <div
                                 key={user.uid}
@@ -1229,11 +1228,9 @@ const DashboardContent = ({
                                     }}
                                     className="video-player"
                                 ></div>
-                                {!user.videoTrack && (
-                                    <div className="w-full h-full absolute bg-slate-100 top-0 rounded-xl"></div>
-                                )}
                             </div>
                         ))}
+                    </div>
                     </div>
                     <div className="flex items-center justify-center w-full gap-2">
                         <Button onClick={unmuteVideo}>Camera On</Button>
@@ -1279,7 +1276,7 @@ const DashboardContent = ({
                                 <div
                                     onClick={() => setSearchingMessage(true)}
                                     className={cn("shadow-md transition-colors cursor-pointer hover:brightness-150 flex items-center justify-center w-10 h-10 bg-slate-600 rounded-full dark:bg-slate-600 fixed left-[376px] z-50", 
-                                        inCall? "top-[355px]" : "top-16"
+                                        inCall && channelName === conversationId ? "top-[355px]" : "top-16"
                                     )}
                                 >
                                     <FaSearch

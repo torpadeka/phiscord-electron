@@ -526,6 +526,16 @@ const UserProfilePopup = ({
                             >
                                 {nickname || userData[0]}
                             </span>
+                            {nickname && (
+                                <span
+                                className={cn(
+                                    "dark:text-white text-base font-sans font-semibold antialiased max-w-48 overflow-scroll no-scrollbar no-scrollbar::-webkit-scrollbar",
+                                    fontSans.variable
+                                )}
+                            >
+                                {userData[0]}
+                            </span>
+                            )}
                             <span
                                 className={cn(
                                     "dark:text-slate-400 text-slate-700 text-sm font-sans antialiased",
